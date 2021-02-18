@@ -1,7 +1,6 @@
 {
     "name": "charm-lt",
     "devDependencies": {
-        "prettier": "^2.1.2",
         "prettier-plugin-solidity": "^1.0.0-alpha.58",
         "solhint-plugin-prettier": "0.0.5"
     },
