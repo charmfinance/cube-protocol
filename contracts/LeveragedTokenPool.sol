@@ -11,168 +11,223 @@ import "@openzeppelin/contracts/utils/Address.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 import "./LeveragedToken.sol";
-import "./Oracle.sol";
-
+import "../interfaces/AggregatorV3Interface.sol";
 
 // TODO
-// - add more view methods like pricing, tvl per pool, value of position etc
+// - clone lt
 
+// - add views
+// - getLeveragedTokenCost(..., amount)
+// - getLongLeveragedToken(token)
 
+// - add docs
+// - add events
 
+// - deposit/withdraw eth
 
-
-contract LeveragedTokenPool is Ownable, ReentrancyGuard, Oracle {
+contract LeveragedTokenPool is Ownable, ReentrancyGuard {
     using Address for address;
     using SafeERC20 for IERC20;
     using SafeMath for uint256;
 
-    enum Side { Long, Short }
+    enum Side {Long, Short}
 
     struct Params {
         bool added;
-        LeveragedToken ltoken;
-        uint256 maxPoolShare;
+        string tokenSymbol;
+        Side side;
+        uint256 maxPoolShare; // in basis points, 0 means no limit
         bool depositPaused;
         bool withdrawPaused;
-        uint256 depositFee;
-        uint256 lastPrice;
+        uint256 lastSquarePrice;
     }
 
-    IERC20 baseToken;
-    mapping(address => mapping(Side => Params)) public params;
-    LeveragedToken[] public leveragedTokens;
-    uint256 public totalValue;
-    uint256 public feeEarned;
-    uint256 public maxTvl;
+    IERC20 public baseToken;
 
-    constructor (address _baseToken) {
+    mapping(LeveragedToken => Params) public params;
+    LeveragedToken[] public leveragedTokens;
+
+    uint256 public depositFee; // in basis points
+    uint256 public maxTvl; // 0 means no limit
+
+    uint256 public totalValue;
+    uint256 public accumulatedFees;
+    bool public finalized;
+
+    mapping(string => mapping(string => address)) public feeds;
+
+    constructor(address _baseToken) {
         baseToken = IERC20(_baseToken);
     }
 
-    function deposit(address token, Side side, uint256 amount, address to) external nonReentrant returns (uint256 shares) {
-        require(side == Side.Short || side == Side.Long, "Invalid side");
+    function deposit(
+        LeveragedToken ltoken,
+        uint256 amountIn,
+        uint256 minSharesOut,
+        address to
+    ) external nonReentrant returns (uint256 sharesOut) {
+        require(params[ltoken].added, "Token not added");
+        require(!params[ltoken].depositPaused, "Paused");
 
-        Params storage _params = params[token][side];
-        require(_params.added, "Token not added");
-        require(!_params.depositPaused, "Paused");
-
-        baseToken.transferFrom(msg.sender, address(this), amount);
-
-        uint256 fee = amount.mul(_params.depositFee).div(1e4);
-        feeEarned = feeEarned.add(fee);
-
-        uint256 price = updatePrice(token, side);
-        shares = _calcSharesFromAmount(price, amount.sub(fee));
-        totalValue = totalValue.add(shares.mul(price));
-
-        LeveragedToken ltoken = _params.ltoken;
-        ltoken.mint(to, shares);
-
-        uint256 maxPoolShare = _params.maxPoolShare;
-        require(maxPoolShare == 0 || ltoken.totalSupply().mul(price) < maxPoolShare.mul(totalValue), "Max pool share exceeded");
-        require(maxTvl == 0 || getBalance() < maxTvl, "Max TVL exceeded");
-    }
-
-    function withdraw(address token, Side side, uint256 amount, address to) external nonReentrant returns (uint256 shares) {
-        require(side == Side.Short || side == Side.Long, "Invalid side");
-
-        Params storage _params = params[token][side];
-        require(_params.added, "Token not added");
-        require(!_params.withdrawPaused, "Paused");
-
-        uint256 price = updatePrice(token, side);
-
-        if (amount == 0) {
-            shares = _params.ltoken.balanceOf(msg.sender);
-        } else {
-            shares = _calcSharesFromAmount(price, amount);
+        // if amountIn is 0, it means deposit all
+        if (amountIn == 0) {
+            amountIn = baseToken.balanceOf(msg.sender);
         }
 
-        _params.ltoken.burn(msg.sender, shares);
-        baseToken.transfer(to, amount);
-        totalValue = totalValue.sub(shares.mul(price));
+        // transfer amount in from sender
+        uint256 balanceBefore = baseToken.balanceOf(address(this));
+        baseToken.transferFrom(msg.sender, address(this), amountIn);
+        uint256 balanceAfter = baseToken.balanceOf(address(this));
+        require(balanceAfter.sub(balanceBefore) == amountIn, "Deflationary tokens not supported");
+
+        // calculate fee
+        uint256 fee = amountIn.mul(depositFee).div(1e4);
+        accumulatedFees = accumulatedFees.add(fee);
+
+        // calculate number of shares
+        uint256 squarePrice = updateSquarePrice(ltoken);
+        sharesOut = _calcSharesFromAmount(squarePrice, amountIn.sub(fee));
+        require(sharesOut >= minSharesOut, "Max slippage exceeded");
+
+        // mint shares to recipient and update total value
+        ltoken.mint(to, sharesOut);
+        totalValue = totalValue.add(sharesOut.mul(squarePrice));
+
+        // check max pool share and tvl
+        uint256 maxPoolShare = params[ltoken].maxPoolShare;
+        if (maxPoolShare > 0) {
+            uint256 ltokenValue = ltoken.totalSupply().mul(squarePrice);
+            require(ltokenValue.mul(1e4) <= maxPoolShare.mul(totalValue), "Max pool share exceeded");
+        }
+        if (maxTvl > 0) {
+            require(getBalance() <= maxTvl, "Max TVL exceeded");
+        }
     }
 
-    function _calcSharesFromAmount(uint256 price, uint256 amount) internal view returns (uint256) {
+    function withdraw(
+        LeveragedToken ltoken,
+        uint256 amountOut,
+        uint256 maxSharesIn,
+        address to
+    ) external nonReentrant returns (uint256 sharesIn) {
+        require(params[ltoken].added, "Token not added");
+        require(!params[ltoken].withdrawPaused, "Paused");
+
+        uint256 squarePrice = updateSquarePrice(ltoken);
+
+        // if amountOut is 0, it means withdraw all
+        if (amountOut == 0) {
+            sharesIn = ltoken.balanceOf(msg.sender);
+            amountOut = _calcAmountFromShares(squarePrice, sharesIn);
+        } else {
+            sharesIn = _calcSharesFromAmount(squarePrice, amountOut).add(1);
+        }
+        require(sharesIn <= maxSharesIn, "Max slippage exceeded");
+
+        // burn shares from sender and update total value
+        ltoken.burn(msg.sender, sharesIn);
+        totalValue = totalValue.sub(sharesIn.mul(squarePrice));
+
+        // transfer amount out to recipient
+        baseToken.transfer(to, amountOut);
+    }
+
+    function _calcSharesFromAmount(uint256 squarePrice, uint256 amount) internal view returns (uint256) {
         uint256 balance = getBalance();
         if (balance == 0) {
             return amount;
         }
-        return amount.mul(totalValue).div(price).div(balance);
+        return amount.mul(totalValue).div(squarePrice).div(balance);
     }
 
-    function getUnnormalizedPrice(address token, Side side) public view returns (uint256) {
-        uint256 price = getTokenPrice(token);
-        uint256 squarePrice = price.mul(price);
-        return side == Side.Short ? uint256(1e36).div(squarePrice) : squarePrice;
+    function _calcAmountFromShares(uint256 squarePrice, uint256 shares) internal view returns (uint256) {
+        return shares.mul(squarePrice).mul(getBalance()).div(totalValue);
     }
 
-    function updatePrice(address token, Side side) public returns (uint256 price) {
-        Params storage _params = params[token][side];
-        uint256 lastPrice = _params.lastPrice;
+    function updateSquarePrice(LeveragedToken ltoken) public returns (uint256 squarePrice) {
+        Params storage _params = params[ltoken];
+        require(_params.added, "Token not added");
 
-        uint256 _totalSupply = _params.ltoken.totalSupply();
-        price = getUnnormalizedPrice(token, side);
+        squarePrice = getSquarePrice(ltoken);
+        uint256 lastSquarePrice = _params.lastSquarePrice;
 
-        totalValue = totalValue.sub(_params.lastPrice.mul(_totalSupply));
-        totalValue = totalValue.add(price.mul(_totalSupply));
-        _params.lastPrice = price;
+        if (squarePrice > lastSquarePrice) {
+            uint256 increase = squarePrice.sub(lastSquarePrice);
+            totalValue = totalValue.add(ltoken.totalSupply().mul(increase));
+        } else if (squarePrice < lastSquarePrice) {
+            uint256 decrease = lastSquarePrice.sub(squarePrice);
+            totalValue = totalValue.sub(ltoken.totalSupply().mul(decrease));
+        }
+        _params.lastSquarePrice = squarePrice;
     }
 
-    function updateAllPrices() external {
-        for (uint256 i = 0; i < leveragedTokens.length; i++) {
+    // needs to be called regularly
+    function keep() external {
+        for (uint256 i = 0; i < leveragedTokens.length; i = i.add(1)) {
             LeveragedToken ltoken = leveragedTokens[i];
-            updatePrice(ltoken.token(), ltoken.side());
+            updateSquarePrice(ltoken);
         }
     }
 
-    function addLeveragedToken(address token, Side side) external onlyOwner {
+    // TODO: check max possible prices
+    function getSquarePrice(LeveragedToken ltoken) public view returns (uint256) {
+        Params storage _params = params[ltoken];
+        uint256 underlyingPrice = getUnderlyingPrice(_params.tokenSymbol);
+        uint256 squarePrice = underlyingPrice.mul(underlyingPrice);
+        return _params.side == Side.Short ? uint256(1e54).div(squarePrice) : squarePrice.div(1e18);
+    }
+
+    // TODO: check gas savings by caching feeds
+    function getUnderlyingPrice(string memory symbol) public view returns (uint256) {
+        address feed = feeds[symbol]["USD"];
+        if (feed != address(0)) {
+            return _latestPrice(feed).mul(1e10);
+        }
+        uint256 price1 = _latestPrice(feeds[symbol]["ETH"]);
+        uint256 price2 = _latestPrice(feeds["ETH"]["USD"]);
+        return price1.mul(price2).div(1e8);
+    }
+
+    function _latestPrice(address feed) internal view returns (uint256) {
+        require(feed != address(0), "Feed not added");
+        (, int256 price, , , ) = AggregatorV3Interface(feed).latestRoundData();
+        require(price > 0, "Price is not > 0");
+        return uint256(price);
+    }
+
+    function addLeveragedToken(address token, Side side) external onlyOwner returns (address) {
         require(side == Side.Short || side == Side.Long, "Invalid side");
-        require(!params[token][side].added, "Already added");
 
-        string memory name = string(
-            abi.encodePacked(
-                "Charm 2X ",
-                (side == Side.Long ? "Long " : "Short "),
-                ERC20(token).name()
-            )
-        );
+        string memory tokenSymbol = ERC20(token).symbol();
+        string memory name =
+            string(abi.encodePacked("Charm 2X ", (side == Side.Long ? "Long " : "Short "), ERC20(token).name()));
+        string memory symbol = string(abi.encodePacked("charm", tokenSymbol, (side == Side.Long ? "BULL" : "BEAR")));
+        LeveragedToken ltoken = new LeveragedToken(address(this), name, symbol);
 
-        string memory symbol = string(
-            abi.encodePacked(
-                "charm",
-                ERC20(token).symbol(),
-                (side == Side.Long ? "BULL" : "BEAR")
-            )
-        );
-
-        LeveragedToken ltoken = new LeveragedToken(address(this), token, side, name, symbol);
-        params[token][side] = Params({
+        params[ltoken] = Params({
             added: true,
-            ltoken: ltoken,
+            tokenSymbol: tokenSymbol,
+            side: side,
             maxPoolShare: 0,
-            depositPaused: true,
-            withdrawPaused: true,
-            depositFee: 0,
-            lastPrice: 0
+            depositPaused: false,
+            withdrawPaused: false,
+            lastSquarePrice: 0
         });
         leveragedTokens.push(ltoken);
+        return address(ltoken);
     }
 
     function getBalance() public view returns (uint256) {
-        return baseToken.balanceOf(address(this)).sub(feeEarned);
+        return baseToken.balanceOf(address(this)).sub(accumulatedFees);
     }
 
     function numLeveragedTokens() external view returns (uint256) {
         return leveragedTokens.length;
     }
 
-
-
-
     // move belwo to periphery
     // function getLeveragedTokenPrice(address token, Side side) external view returns (uint256) {
-    //     uint256 price = getUnnormalizedPrice(ltoken.token(), ltoken.side());
+    //     uint256 price = getSquarePrice(ltoken.token(), ltoken.side());
     //     return price.div(totalValue);
     // }
 
@@ -202,6 +257,7 @@ contract LeveragedTokenPool is Ownable, ReentrancyGuard, Oracle {
     //     }
     // }
 
+    // TODO: splti into 2 methods
     // function getMaxDepositAmounts() external view returns (uint256[] amounts) {
     //     uint256 n = leveragedTokens.length;
     //     amounts = new uint256[n];
@@ -212,22 +268,58 @@ contract LeveragedTokenPool is Ownable, ReentrancyGuard, Oracle {
     //     }
     // }
 
+    function registerFeed(
+        string memory baseSymbol,
+        string memory quoteSymbol,
+        address feed
+    ) external onlyOwner {
+        feeds[baseSymbol][quoteSymbol] = feed;
+    }
 
+    function setDepositPaused(LeveragedToken ltoken, bool paused) external onlyOwner {
+        require(params[ltoken].added, "Token not added");
+        params[ltoken].depositPaused = paused;
+    }
 
-    // function setDepositPaused(uint256 index, bool isPaused) external onlyOwner {
-    //     isDepositPaused[index] = isPaused;
-    // }
+    function setWithdrawPaused(LeveragedToken ltoken, bool paused) external onlyOwner {
+        require(params[ltoken].added, "Token not added");
+        params[ltoken].withdrawPaused = paused;
+    }
 
-    // function setWithdrawPaused(uint256 index, bool isPaused) external onlyOwner {
-    //     isWithdrawPaused[index] = isPaused;
-    // }
+    function pauseAll() external onlyOwner {
+        for (uint256 i = 0; i < leveragedTokens.length; i = i.add(1)) {
+            LeveragedToken ltoken = leveragedTokens[i];
+            params[ltoken].depositPaused = true;
+            params[ltoken].withdrawPaused = true;
+        }
+    }
 
-    // function updateFee(uint256 _fee) external onlyOwner {
-    //     fee = _fee;
-    // }
+    function updateMaxPoolShare(LeveragedToken ltoken, uint256 maxPoolShare) external onlyOwner {
+        require(params[ltoken].added, "Token not added");
+        require(maxPoolShare < 1e4, "Max pool share must be < 100%");
+        params[ltoken].maxPoolShare = maxPoolShare;
+    }
 
-    // function collectFee() external onlyOwner {
-    //     require(owner.send(feeEarned));
-    //     feeEarned = 0;
-    // }
+    function updateMaxTvl(uint256 _maxTvl) external onlyOwner {
+        maxTvl = _maxTvl;
+    }
+
+    function updateDepositFee(uint256 _depositFee) external onlyOwner {
+        require(_depositFee < 1e4, "Deposit fee must be < 100%");
+        depositFee = _depositFee;
+    }
+
+    function collectFee() external onlyOwner {
+        require(msg.sender.send(accumulatedFees));
+        accumulatedFees = 0;
+    }
+
+    function finalize() external onlyOwner {
+        finalized = true;
+    }
+
+    function emergencyWithdraw() external onlyOwner {
+        require(!finalized, "Finalized");
+        baseToken.transfer(owner(), baseToken.balanceOf(address(this)));
+    }
 }

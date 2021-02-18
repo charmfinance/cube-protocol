@@ -8,7 +8,9 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/Address.sol";
 
-import "./LeveragedTokenPool.sol";
+import "./PriceFeed.sol";
+
+// TODO: minimal proxy / create2
 
 contract LeveragedToken is ERC20 {
     using Address for address;
@@ -16,21 +18,13 @@ contract LeveragedToken is ERC20 {
     using SafeMath for uint256;
 
     address public pool;
-    IERC20 public token;
-    LeveragedTokenPool.Side public side;
 
     constructor(
         address _pool,
-        address _token,
-        LeveragedTokenPool.Side _side,
         string memory name,
         string memory symbol
-    )
-        ERC20(name, symbol)
-    {
+    ) ERC20(name, symbol) {
         pool = _pool;
-        token = IERC20(token);
-        side = side;
     }
 
     function mint(address account, uint256 amount) external {

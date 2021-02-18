@@ -2,11 +2,63 @@ from brownie import reverts, ZERO_ADDRESS
 import pytest
 
 
-def test_oracle(a, LeveragedTokenPool, MockAggregatorV3Interface, MockToken):
+
+
+
+def test_add_lt(a, LeveragedTokenPool, LeveragedToken, MockToken, MockAggregatorV3Interface):
     deployer, alice = a[:2]
 
     # deploy pool
-    pool = deployer.deploy(LeveragedTokenPool)
+    usdc = deployer.deploy(MockToken, "usdc", "usdc", 6)
+    pool = deployer.deploy(LeveragedTokenPool, usdc)
+    assert pool.baseToken() == usdc
+
+    weth = deployer.deploy(MockToken, "Wrapped Ether", "WETH", 18)
+    tx = pool.addLeveragedToken(weth, 0, {"from": deployer})
+
+    ethbull = LeveragedToken.at(tx.return_value)
+    assert ethbull.name() == "Charm 2X Long Wrapped Ether"
+    assert ethbull.symbol() == "charmWETHBULL"
+    assert pool.numLeveragedTokens() == 1
+    assert pool.leveragedTokens(0) == ethbull
+
+    added, tokenSymbol, side, maxPoolShare, depositPaused, withdrawPaused, lastSquarePrice = pool.params(ethbull)
+    assert added
+    assert tokenSymbol == "WETH"
+    assert side == 0
+    assert maxPoolShare == 0
+    assert not depositPaused
+    assert not withdrawPaused
+    assert lastSquarePrice == 0
+
+    tx = pool.addLeveragedToken(weth, 1, {"from": deployer})
+
+    ethbear = LeveragedToken.at(tx.return_value)
+    assert ethbear.name() == "Charm 2X Short Wrapped Ether"
+    assert ethbear.symbol() == "charmWETHBEAR"
+    assert pool.numLeveragedTokens() == 2
+    assert pool.leveragedTokens(1) == ethbear
+
+    added, tokenSymbol, side, maxPoolShare, depositPaused, withdrawPaused, lastSquarePrice = pool.params(ethbear)
+    assert added
+    assert tokenSymbol == "WETH"
+    assert side == 1
+    assert maxPoolShare == 0
+    assert not depositPaused
+    assert not withdrawPaused
+    assert lastSquarePrice == 0
+
+
+
+
+
+def test_oracle(a, LeveragedTokenPool, MockAggregatorV3Interface, MockToken):
+    return
+    deployer, alice = a[:2]
+
+    # deploy pool
+    baseToken = deployer.deploy(MockToken, "usdc", "usdc", 6)
+    pool = deployer.deploy(LeveragedTokenPool, baseToken)
 
     # deploy tokens
     btc = deployer.deploy(MockToken, "btc", "btc", 18)
