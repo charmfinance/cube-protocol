@@ -58,6 +58,11 @@ contract LeveragedTokenPool is Ownable, ReentrancyGuard {
 
     mapping(string => mapping(string => address)) public feeds;
 
+    constructor() {
+        // set fee to 0
+        oneMinusFee = 1e4;
+    }
+
     function buy(
         LeveragedToken ltoken,
         uint256 minSharesOut,
@@ -70,7 +75,9 @@ contract LeveragedTokenPool is Ownable, ReentrancyGuard {
         uint256 squarePrice = updateSquarePrice(ltoken);
 
         // calculate number of shares
-        amountIn = _subtractFee(msg.value);
+        uint256 amountIn = _subtractFee(msg.value);
+        require(amountIn > 0, "Amount in should be > 0");
+
         sharesOut = _divPrice(squarePrice, amountIn);
         require(sharesOut >= minSharesOut, "Max slippage exceeded");
 
@@ -104,6 +111,7 @@ contract LeveragedTokenPool is Ownable, ReentrancyGuard {
         Params storage _params = params[ltoken];
         require(_params.added, "Not added");
         require(!_params.withdrawPaused, "Paused");
+        require(sharesIn > 0, "Shares in should be > 0");
 
         uint256 squarePrice = updateSquarePrice(ltoken);
 
@@ -128,9 +136,10 @@ contract LeveragedTokenPool is Ownable, ReentrancyGuard {
         require(_params.added, "Not added");
 
         squarePrice = getSquarePrice(ltoken);
+        require(squarePrice > 0, "Square price should be > 0");
+
         uint256 lastSquarePrice = _params.lastSquarePrice;
         uint256 _totalSupply = ltoken.totalSupply();
-
         totalValue = totalValue.sub(_totalSupply.mul(lastSquarePrice)).add(_totalSupply.mul(squarePrice));
         _params.lastSquarePrice = squarePrice;
     }
@@ -143,7 +152,7 @@ contract LeveragedTokenPool is Ownable, ReentrancyGuard {
         }
     }
 
-    // TODO: check max possible prices
+    // if underlying price > around 3e29, this can overflow
     function getSquarePrice(LeveragedToken ltoken) public view returns (uint256) {
         Params storage _params = params[ltoken];
         uint256 underlyingPrice = getUnderlyingPrice(_params.tokenSymbol);
@@ -151,21 +160,20 @@ contract LeveragedTokenPool is Ownable, ReentrancyGuard {
         return _params.side == Side.Short ? uint256(1e54).div(squarePrice) : squarePrice.div(1e18);
     }
 
-    // TODO: check gas savings by caching feeds
     function getUnderlyingPrice(string memory symbol) public view returns (uint256) {
         address feed = feeds[symbol]["USD"];
         if (feed != address(0)) {
             return _latestPrice(feed).mul(1e10);
         }
-        uint256 price1 = _latestPrice(feeds[symbol]["ETH"]);
-        uint256 price2 = _latestPrice(feeds["ETH"]["USD"]);
-        return price1.mul(price2).div(1e8);
+        uint256 tokenEthPrice = _latestPrice(feeds[symbol]["ETH"]);
+        uint256 ethUsdPrice = _latestPrice(feeds["ETH"]["USD"]);
+        return tokenEthPrice.mul(ethUsdPrice).div(1e8);
     }
 
     function _latestPrice(address feed) internal view returns (uint256) {
         require(feed != address(0), "Feed not added");
         (, int256 price, , , ) = AggregatorV3Interface(feed).latestRoundData();
-        require(price > 0, "Price is not > 0");
+        require(price > 0, "Price should be > 0");
         return uint256(price);
     }
 
@@ -173,6 +181,8 @@ contract LeveragedTokenPool is Ownable, ReentrancyGuard {
         require(side == Side.Short || side == Side.Long, "Invalid side");
 
         string memory tokenSymbol = ERC20(token).symbol();
+        require(getUnderlyingPrice(tokenSymbol) < 1e26, "Price is too high. Might overflow later");
+
         string memory name =
             string(abi.encodePacked("Charm 2X ", (side == Side.Long ? "Long " : "Short "), ERC20(token).name()));
         string memory symbol = string(abi.encodePacked("charm", tokenSymbol, (side == Side.Long ? "BULL" : "BEAR")));
@@ -188,6 +198,7 @@ contract LeveragedTokenPool is Ownable, ReentrancyGuard {
             lastSquarePrice: 0
         });
         leveragedTokens.push(ltoken);
+        updateSquarePrice(ltoken);
         return address(ltoken);
     }
 
@@ -197,6 +208,14 @@ contract LeveragedTokenPool is Ownable, ReentrancyGuard {
 
     function _subtractFee(uint256 amount) internal view returns (uint256) {
         return amount.mul(oneMinusFee).div(1e4);
+    }
+
+    function getLeveragedTokens() external view returns (LeveragedToken[] memory ltokens) {
+        uint256 n = leveragedTokens.length;
+        ltokens = new LeveragedToken[](n);
+        for (uint256 i = 0; i < n; i++) {
+            ltokens[i] = leveragedTokens[i];
+        }
     }
 
     // move belwo to periphery
@@ -243,13 +262,19 @@ contract LeveragedTokenPool is Ownable, ReentrancyGuard {
     // }
 
     function getSharesFromAmount(LeveragedToken ltoken, uint256 amount) external view returns (uint256) {
+        Params storage _params = params[ltoken];
+        require(_params.added, "Not added");
+        uint256 squarePrice = _params.lastSquarePrice;
+
         amount = _subtractFee(amount);
-        uint256 squarePrice = _params[ltoken].lastSquarePrice;
         return _divPrice(squarePrice, amount);
     }
 
     function getAmountFromShares(LeveragedToken ltoken, uint256 shares) external view returns (uint256) {
-        uint256 squarePrice = _params[ltoken].lastSquarePrice;
+        Params storage _params = params[ltoken];
+        require(_params.added, "Not added");
+        uint256 squarePrice = _params.lastSquarePrice;
+
         uint256 amount =  _mulPrice(squarePrice, shares);
         return _subtractFee(amount);
     }
@@ -258,7 +283,7 @@ contract LeveragedTokenPool is Ownable, ReentrancyGuard {
         return uint256(1e4).sub(oneMinusFee);
     }
 
-    function _divPrice(uint256 squarePrice, uint256 amount, uint256 balance) internal view returns (uint256) {
+    function _divPrice(uint256 squarePrice, uint256 amount) internal view returns (uint256) {
         uint256 _poolBalance = poolBalance;
         return _poolBalance > 0 ? amount.mul(totalValue).div(squarePrice).div(_poolBalance) : amount;
     }
@@ -273,6 +298,9 @@ contract LeveragedTokenPool is Ownable, ReentrancyGuard {
         string memory quoteSymbol,
         address feed
     ) external onlyOwner {
+        require(bytes(baseSymbol).length > 0, "Base symbol should not be empty");
+        require(bytes(quoteSymbol).length > 0, "Quote symbol should not be empty");
+        require(_latestPrice(feed) > 0, "Price should be > 0");
         feeds[baseSymbol][quoteSymbol] = feed;
     }
 
@@ -296,7 +324,7 @@ contract LeveragedTokenPool is Ownable, ReentrancyGuard {
 
     function updateMaxPoolShare(LeveragedToken ltoken, uint256 maxPoolShare) external onlyOwner {
         require(params[ltoken].added, "Not added");
-        require(maxPoolShare < 1e4, "Max pool share must be < 100%");
+        require(maxPoolShare < 1e4, "Max pool share should be < 100%");
         params[ltoken].maxPoolShare = maxPoolShare;
     }
 
@@ -305,12 +333,12 @@ contract LeveragedTokenPool is Ownable, ReentrancyGuard {
     }
 
     function updateFee(uint256 _fee) external onlyOwner {
-        require(_fee < 1e4, "Deposit fee must be < 100%");
+        require(_fee < 1e4, "Deposit fee should be < 100%");
         oneMinusFee = uint(1e4).sub(_fee);
     }
 
     function collectFee() external onlyOwner {
-        uint256 fee = address(this).balance().sub(poolBalance);
+        uint256 fee = address(this).balance.sub(poolBalance);
         require(msg.sender.send(fee), "Transfer failed");
     }
 
@@ -320,6 +348,8 @@ contract LeveragedTokenPool is Ownable, ReentrancyGuard {
 
     function emergencyWithdraw() external onlyOwner {
         require(!finalized, "Finalized");
-        baseToken.transfer(owner(), baseToken.balanceOf(address(this)));
+
+        uint256 balance = address(this).balance;
+        require(msg.sender.send(balance), "Transfer failed");
     }
 }

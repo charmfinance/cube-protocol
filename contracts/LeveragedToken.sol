@@ -8,8 +8,6 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/Address.sol";
 
-import "./PriceFeed.sol";
-
 // TODO: minimal proxy / create2
 
 contract LeveragedToken is ERC20 {

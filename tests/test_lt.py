@@ -2,132 +2,190 @@ from brownie import reverts, ZERO_ADDRESS
 import pytest
 
 
+LONG, SHORT = 0, 1
 
+
+def test_price_feed(a, LeveragedTokenPool, MockAggregatorV3Interface):
+    deployer, alice = a[:2]
+
+    aaausd = deployer.deploy(MockAggregatorV3Interface)
+    aaaeth = deployer.deploy(MockAggregatorV3Interface)
+    bbbeth = deployer.deploy(MockAggregatorV3Interface)
+    cccusd = deployer.deploy(MockAggregatorV3Interface)
+    ethusd = deployer.deploy(MockAggregatorV3Interface)
+
+    pool = deployer.deploy(LeveragedTokenPool)
+
+    with reverts("Ownable: caller is not the owner"):
+        pool.registerFeed("AAA", "USD", aaausd, {"from": alice})
+    with reverts("Price should be > 0"):
+        pool.registerFeed("AAA", "USD", aaausd)
+    with reverts("Base symbol should not be empty"):
+        pool.registerFeed("", "USD", aaausd)
+    with reverts("Quote symbol should not be empty"):
+        pool.registerFeed("BTC", "", aaausd)
+
+    aaausd.setPrice(0.1 * 1e8)
+    aaaeth.setPrice(0.0000555 * 1e18)
+    bbbeth.setPrice(10 * 1e18)
+    cccusd.setPrice(100 * 1e8)
+    ethusd.setPrice(2000 * 1e8)
+
+    pool.registerFeed("AAA", "USD", aaausd)
+    pool.registerFeed("AAA", "ETH", aaaeth)
+    pool.registerFeed("BBB", "ETH", bbbeth)
+    pool.registerFeed("CCC", "USD", cccusd)
+
+    assert pool.getUnderlyingPrice("AAA") == 0.1 * 1e18
+    assert pool.getUnderlyingPrice("CCC") == 100 * 1e18
+
+    with reverts("Feed not added"):
+        pool.getUnderlyingPrice("BBB")
+
+    pool.registerFeed("ETH", "USD", ethusd)
+
+    assert pool.getUnderlyingPrice("AAA") == 0.1 * 1e18
+    assert pool.getUnderlyingPrice("BBB") == 20000 * 1e18
+    assert pool.getUnderlyingPrice("CCC") == 100 * 1e18
+    assert pool.getUnderlyingPrice("ETH") == 2000 * 1e18
+
+    cccusd.setPrice(120 * 1e8)
+    bbbeth.setPrice(11 * 1e18)
+    ethusd.setPrice(2200 * 1e8)
+
+    assert pool.getUnderlyingPrice("BBB") == 24200 * 1e18
+    assert pool.getUnderlyingPrice("CCC") == 120 * 1e18
+
+    cccusd.setPrice(0)
+    with reverts("Price should be > 0"):
+        pool.getUnderlyingPrice("CCC")
+
+    with reverts("Feed not added"):
+        pool.getUnderlyingPrice("DDD")
+    with reverts("Feed not added"):
+        pool.getUnderlyingPrice("USD")
 
 
 def test_add_lt(a, LeveragedTokenPool, LeveragedToken, MockToken, MockAggregatorV3Interface):
     deployer, alice = a[:2]
 
     # deploy pool
-    usdc = deployer.deploy(MockToken, "usdc", "usdc", 6)
-    pool = deployer.deploy(LeveragedTokenPool, usdc)
-    assert pool.baseToken() == usdc
+    pool = deployer.deploy(LeveragedTokenPool)
+    btc = deployer.deploy(MockToken, "Bitcoin", "BTC", 8)
 
-    weth = deployer.deploy(MockToken, "Wrapped Ether", "WETH", 18)
-    tx = pool.addLeveragedToken(weth, 0, {"from": deployer})
+    with reverts("Ownable: caller is not the owner"):
+        pool.addLeveragedToken(btc, LONG, {"from": alice})
 
-    ethbull = LeveragedToken.at(tx.return_value)
-    assert ethbull.name() == "Charm 2X Long Wrapped Ether"
-    assert ethbull.symbol() == "charmWETHBULL"
+    with reverts("Feed not added"):
+        pool.addLeveragedToken(btc, LONG)
+
+    btcusd = deployer.deploy(MockAggregatorV3Interface)
+    btcusd.setPrice(50000 * 1e8)
+    pool.registerFeed("BTC", "USD", btcusd)
+
+    btcusd.setPrice(1e30)
+    with reverts("Price is too high. Might overflow later"):
+        pool.addLeveragedToken(btc, LONG)
+
+    btcusd.setPrice(0)
+    with reverts("Price should be > 0"):
+        pool.addLeveragedToken(btc, LONG)
+
+    btcusd.setPrice(50000 * 1e8)
+    tx = pool.addLeveragedToken(btc, LONG)
+
+    btcbull = LeveragedToken.at(tx.return_value)
+    assert btcbull.name() == "Charm 2X Long Bitcoin"
+    assert btcbull.symbol() == "charmBTCBULL"
     assert pool.numLeveragedTokens() == 1
-    assert pool.leveragedTokens(0) == ethbull
+    assert pool.leveragedTokens(0) == btcbull
 
-    added, tokenSymbol, side, maxPoolShare, depositPaused, withdrawPaused, lastSquarePrice = pool.params(ethbull)
+    added, tokenSymbol, side, maxPoolShare, depositPaused, withdrawPaused, lastSquarePrice = pool.params(btcbull)
     assert added
-    assert tokenSymbol == "WETH"
-    assert side == 0
+    assert tokenSymbol == "BTC"
+    assert side == LONG
     assert maxPoolShare == 0
     assert not depositPaused
     assert not withdrawPaused
-    assert lastSquarePrice == 0
+    assert lastSquarePrice == 50000 * 50000 * 1e18
 
-    tx = pool.addLeveragedToken(weth, 1, {"from": deployer})
+    tx = pool.addLeveragedToken(btc, SHORT)
 
-    ethbear = LeveragedToken.at(tx.return_value)
-    assert ethbear.name() == "Charm 2X Short Wrapped Ether"
-    assert ethbear.symbol() == "charmWETHBEAR"
+    btcbear = LeveragedToken.at(tx.return_value)
+    assert btcbear.name() == "Charm 2X Short Bitcoin"
+    assert btcbear.symbol() == "charmBTCBEAR"
     assert pool.numLeveragedTokens() == 2
-    assert pool.leveragedTokens(1) == ethbear
+    assert pool.leveragedTokens(1) == btcbear
 
-    added, tokenSymbol, side, maxPoolShare, depositPaused, withdrawPaused, lastSquarePrice = pool.params(ethbear)
+    added, tokenSymbol, side, maxPoolShare, depositPaused, withdrawPaused, lastSquarePrice = pool.params(btcbear)
     assert added
-    assert tokenSymbol == "WETH"
-    assert side == 1
+    assert tokenSymbol == "BTC"
+    assert side == SHORT
     assert maxPoolShare == 0
     assert not depositPaused
     assert not withdrawPaused
-    assert lastSquarePrice == 0
+    assert lastSquarePrice == 1.0 / 50000 / 50000 * 1e18
+
+    assert pool.numLeveragedTokens() == 2
+    assert pool.leveragedTokens(0) == btcbull
+    assert pool.leveragedTokens(1) == btcbear
+    assert pool.getLeveragedTokens() == [btcbull, btcbear]
 
 
-
-
-
-def test_oracle(a, LeveragedTokenPool, MockAggregatorV3Interface, MockToken):
-    return
-    deployer, alice = a[:2]
+def test_buy_sell(a, LeveragedTokenPool, LeveragedToken, MockToken, MockAggregatorV3Interface):
+    deployer, alice, bob = a[:3]
 
     # deploy pool
-    baseToken = deployer.deploy(MockToken, "usdc", "usdc", 6)
-    pool = deployer.deploy(LeveragedTokenPool, baseToken)
+    pool = deployer.deploy(LeveragedTokenPool)
+    btc = deployer.deploy(MockToken, "Bitcoin", "BTC", 8)
 
-    # deploy tokens
-    btc = deployer.deploy(MockToken, "btc", "btc", 18)
-    yfi = deployer.deploy(MockToken, "yfi", "yfi", 18)
-    doge = deployer.deploy(MockToken, "doge", "doge", 18)
+    btcusd = deployer.deploy(MockAggregatorV3Interface)
+    btcusd.setPrice(50000 * 1e8)
+    pool.registerFeed("BTC", "USD", btcusd)
 
-    # deploy and setup feeds
-    ethUsd = deployer.deploy(MockAggregatorV3Interface)
-    btcUsd = deployer.deploy(MockAggregatorV3Interface)
-    yfiEth = deployer.deploy(MockAggregatorV3Interface)
+    tx = pool.addLeveragedToken(btc, LONG)
+    btcbull = LeveragedToken.at(tx.return_value)
 
-    ethUsd.setDecimals(8)
-    btcUsd.setDecimals(8)
-    yfiEth.setDecimals(18)
+    tx = pool.addLeveragedToken(btc, SHORT)
+    btcbear = LeveragedToken.at(tx.return_value)
 
-    ethUsd.setPrice(2000e8)
-    btcUsd.setPrice(50000e8)
-    yfiEth.setPrice(15e18)
+    with reverts("Not added"):
+        pool.buy(ZERO_ADDRESS, 1, alice, {"from": bob})
 
-    # can't get price before eth/usd price is set
-    with reverts("Feed not added"):
-        pool.getPrice(yfi)
+    assert pool.getUnderlyingPrice("BTC") == 50000 * 1e18
+    assert pool.getSquarePrice(btcbull) == 50000 * 50000 * 1e18
+    assert pool.getSquarePrice(btcbear) == 1.0 / 50000 / 50000 * 1e18
 
-    # only owner
-    with reverts("Ownable: caller is not the owner"):
-        pool.setEthUsdFeed(ethUsd, {"from": alice})
-    with reverts("Ownable: caller is not the owner"):
-        pool.setUsdFeed(btc, btcUsd, {"from": alice})
-    with reverts("Ownable: caller is not the owner"):
-        pool.setEthFeed(yfi, yfiEth, {"from": alice})
+    pool.updateFee(100)
+    assert pool.oneMinusFee() == 9900
+    assert pool.getFee() == 100
 
-    # set yfi/eth price
-    pool.setEthFeed(yfi, yfiEth, {"from": deployer})
-    assert pool.ethFeeds(yfi) == yfiEth
+    with reverts("Amount in should be > 0"):
+        pool.buy(btcbull, 1, alice, {"from": bob})
 
-    # can't get yfi price yet because eth/usd feed not set
-    with reverts("Feed not added"):
-        pool.getPrice(yfi)
+    with reverts("Max slippage exceeded"):
+        pool.buy(btcbull, 0.99001 * 1e18, alice, {"value": 1 * 1e18, "from": bob})
 
-    # set eth/usd price
-    pool.setEthUsdFeed(ethUsd, {"from": deployer})
-    assert pool.ethUsdFeed() == ethUsd
+    shares = pool.getSharesFromAmount(btcbull, 1 * 1e18)
+    assert shares == 0.99 * 1e18
 
-    # set btc/usd price
-    pool.setUsdFeed(btc, btcUsd, {"from": deployer})
-    assert pool.usdFeeds(btc) == btcUsd
+    tx = pool.buy(btcbull, 0.99 * 1e18, alice, {"value": 1 * 1e18, "from": bob})
+    assert tx.return_value == 0.99 * 1e18
+    assert btcbull.balanceOf(alice) == 0.99 * 1e18
+    assert pool.poolBalance() == 0.99 * 1e18
+    assert pool.totalValue() == 0.99 * 1e18 * 50000 * 50000 * 1e18
 
-    # can get btc price
-    assert pool.getPrice(btc) == 50000e18
+    ###
+    shares = pool.getSharesFromAmount(btcbear, 1 * 1e18)
+    assert shares == 0.99 * 1e18
 
-    # can get yfi price
-    assert pool.getPrice(yfi) == 30000e18
+    tx = pool.buy(btcbear, 0, alice, {"value": 1 * 1e18, "from": bob})
+    assert tx.return_value == 0.99 * 1e18
+    assert btcbull.balanceOf(alice) == 0.99 * 1e18
+    assert pool.poolBalance() == 0.99 * 1e18
+    assert pool.totalValue() == 0.99 * 1e18 * 50000 * 50000 * 1e18
 
-    # can't get doge price as no feed has been set
-    with reverts("Feed not added"):
-        pool.getPrice(doge)
-
-    # remove btc/usd feed
-    pool.setUsdFeed(btc, ZERO_ADDRESS, {"from": deployer})
-
-    # can't get btc price any more
-    with reverts("Feed not added"):
-        pool.getPrice(btc)
-    assert pool.getPrice(yfi) == 30000e18
-
-    # remove yfi/eth feed
-    pool.setEthFeed(yfi, ZERO_ADDRESS, {"from": deployer})
-
-    # can't get yfi price any more
-    with reverts("Feed not added"):
-        pool.getPrice(yfi)
+    btcusd.setPrice(40000 * 1e8)
+    assert pool.poolBalance() == 0.99 * 1e18
+    assert pool.totalValue() == 0.99 * 1e18 * 40000 * 40000 * 1e18
 
