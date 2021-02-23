@@ -16,6 +16,8 @@ import "../interfaces/AggregatorV3Interface.sol";
 // TODO
 // - clone lt
 
+// - use token address for feed registry
+
 // - add views
 // - getLeveragedTokenCost(..., amount)
 // - getLongLeveragedToken(token)
