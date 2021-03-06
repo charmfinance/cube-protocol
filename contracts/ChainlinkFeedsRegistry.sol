@@ -10,7 +10,6 @@ import "@openzeppelin/contracts/utils/Address.sol";
 
 import "../interfaces/AggregatorV3Interface.sol";
 
-
 contract ChainlinkFeedsRegistry is Ownable {
     using Address for address;
     using SafeERC20 for IERC20;
@@ -22,7 +21,7 @@ contract ChainlinkFeedsRegistry is Ownable {
     mapping(address => address) public usdFeeds;
     mapping(address => address) public ethFeeds;
 
-    function getPrice(address token) external view returns(uint256) {
+    function getPrice(address token) external view returns (uint256) {
         if (usdFeeds[token] != address(0)) {
             return _latestPrice(usdFeeds[token]);
         } else if (ethFeeds[token] != address(0)) {

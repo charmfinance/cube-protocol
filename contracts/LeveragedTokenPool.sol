@@ -44,7 +44,8 @@ contract LeveragedTokenPool is Ownable, ReentrancyGuard {
         uint256 maxPoolShare; // expressed in basis points, 0 means no limit
         bool buyPaused;
         bool sellPaused;
-        uint256 lastSquarePrice;
+        uint256 initialSquarePrice;
+        uint256 lastPriceMove;
     }
 
     ChainlinkFeedsRegistry feedRegistry;
@@ -76,7 +77,7 @@ contract LeveragedTokenPool is Ownable, ReentrancyGuard {
         require(_params.added, "Not added");
         require(!_params.buyPaused, "Paused");
 
-        uint256 squarePrice = updateSquarePrice(ltoken);
+        uint256 squarePrice = updatePrice(ltoken);
 
         // calculate number of shares
         cost = quote(ltoken, quantity);
@@ -89,7 +90,7 @@ contract LeveragedTokenPool is Ownable, ReentrancyGuard {
 
         // transfer in payment from sender
         baseToken.transferFrom(msg.sender, address(this), cost);
-        
+
         // mint shares to recipient
         ltoken.mint(to, quantity);
 
@@ -121,7 +122,7 @@ contract LeveragedTokenPool is Ownable, ReentrancyGuard {
         require(!_params.sellPaused, "Paused");
         require(quantity > 0, "Quantity should be > 0");
 
-        uint256 squarePrice = updateSquarePrice(ltoken);
+        uint256 squarePrice = updatePrice(ltoken);
 
         // calculate number of shares
         cost = quote(ltoken, quantity);
@@ -141,54 +142,60 @@ contract LeveragedTokenPool is Ownable, ReentrancyGuard {
         baseToken.transfer(to, cost);
     }
 
-    function updateSquarePrice(LeveragedToken ltoken) public returns (uint256 squarePrice) {
+    function updatePrice(LeveragedToken ltoken) public returns (uint256 priceMove) {
         Params storage _params = params[ltoken];
         require(_params.added, "Not added");
 
-        squarePrice = getSquarePrice(_params.token, _params.side);
-        uint256 lastSquarePrice = _params.lastSquarePrice;
+        priceMove = getSquarePriceMove(ltoken);
+        uint256 lastPriceMove = _params.lastPriceMove;
         uint256 _totalSupply = ltoken.totalSupply();
-        totalValue = totalValue.sub(_totalSupply.mul(lastSquarePrice)).add(_totalSupply.mul(squarePrice));
-        _params.lastSquarePrice = squarePrice;
+
+        totalValue = totalValue.sub(_totalSupply.mul(lastPriceMove)).add(_totalSupply.mul(priceMove));
+        _params.lastPriceMove = priceMove;
     }
 
     // needs to be called regularly
-    function updateAllSquarePrices() external {
+    function updateAllPrices() external {
         uint256 _totalValue;
         for (uint256 i = 0; i < leveragedTokens.length; i = i.add(1)) {
             LeveragedToken ltoken = leveragedTokens[i];
-            Params storage _params = params[ltoken];
 
-            uint256 squarePrice = getSquarePrice(_params.token, _params.side);
-            _totalValue = _totalValue.add(ltoken.totalSupply().mul(squarePrice));
-            _params.lastSquarePrice = squarePrice;
+            uint256 priceMove = getSquarePriceMove(ltoken);
+            _totalValue = _totalValue.add(ltoken.totalSupply().mul(priceMove));
+            params[ltoken].lastPriceMove = priceMove;
         }
 
         // save gas by only updating totalValue at the end
         totalValue = _totalValue;
     }
 
-    // returns 24dp
+    // returns 18dp
+    function getSquarePriceMove(LeveragedToken ltoken) public view returns (uint256) {
+        Params storage _params = params[ltoken];
+        require(_params.added, "Not added");
+
+        uint256 squarePrice = getSquarePrice(_params.token, _params.side);
+        return squarePrice.mul(1e18).div(_params.initialSquarePrice);
+    }
+
+    // returns 36dp
     function getSquarePrice(address token, Side side) public view returns (uint256 squarePrice) {
         uint256 price = feedRegistry.getPrice(token);
         if (side == Side.Long) {
-            squarePrice = price.mul(price).mul(1e8);
+            squarePrice = price.mul(price).mul(1e20);
         } else {
-            squarePrice = uint256(1e40).div(price).div(price);
+            squarePrice = uint256(1e52).div(price).div(price);
         }
-        require(squarePrice > 0, "Square price should be > 0");
+        require(squarePrice > 0, "Square price must be > 0");
     }
 
     function addLeveragedToken(address token, Side side) external onlyOwner returns (address) {
         require(side == Side.Short || side == Side.Long, "Invalid side");
 
-        require(feedRegistry.getPrice(token) > 0, "Price must be > 0");
-        require(feedRegistry.getPrice(token) < 1e26, "Price is too high. Might overflow later");
-
-        string memory tokenSymbol = ERC20(token).symbol();
         string memory name =
             string(abi.encodePacked("Charm 2X ", (side == Side.Long ? "Long " : "Short "), ERC20(token).name()));
-        string memory symbol = string(abi.encodePacked("charm", tokenSymbol, (side == Side.Long ? "BULL" : "BEAR")));
+        string memory symbol =
+            string(abi.encodePacked("charm", ERC20(token).symbol(), (side == Side.Long ? "BULL" : "BEAR")));
         LeveragedToken ltoken = new LeveragedToken(address(this), name, symbol);
 
         params[ltoken] = Params({
@@ -198,12 +205,13 @@ contract LeveragedTokenPool is Ownable, ReentrancyGuard {
             maxPoolShare: 0,
             buyPaused: false,
             sellPaused: false,
-            lastSquarePrice: 0
+            initialSquarePrice: getSquarePrice(token, side),
+            lastPriceMove: 0
         });
         leveragedTokens.push(ltoken);
         leveragedTokensMap[token][side] = ltoken;
 
-        updateSquarePrice(ltoken);
+        updatePrice(ltoken);
         return address(ltoken);
     }
 
@@ -214,8 +222,9 @@ contract LeveragedTokenPool is Ownable, ReentrancyGuard {
     function quote(LeveragedToken ltoken, uint256 shares) public view returns (uint256 cost) {
         Params storage _params = params[ltoken];
         require(_params.added, "Not added");
-        uint256 squarePrice = _params.lastSquarePrice;
+
         uint256 _totalValue = totalValue;
+        uint256 squarePrice = _params.lastPriceMove;
         return _totalValue > 0 ? shares.mul(squarePrice).mul(poolBalance()).div(_totalValue) : shares;
     }
 

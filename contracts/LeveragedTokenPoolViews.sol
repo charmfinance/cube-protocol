@@ -5,9 +5,7 @@ pragma solidity ^0.7.6;
 import "./LeveragedToken.sol";
 import "./LeveragedTokenPool.sol";
 
-
 contract LeveragedTokenPoolViews {
-
     function getLeveragedTokens(LeveragedTokenPool pool) external view returns (LeveragedToken[] memory ltokens) {
         uint256 n = pool.numLeveragedTokens();
         ltokens = new LeveragedToken[](n);
