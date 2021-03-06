@@ -17,8 +17,6 @@ import "./LeveragedToken.sol";
 import "../interfaces/AggregatorV3Interface.sol";
 
 // TODO
-// - clone lt
-
 // - test X/eth
 // - test admin methods
 
@@ -195,6 +193,7 @@ contract LeveragedTokenPool is Ownable, ReentrancyGuard {
 
     function addLeveragedToken(address token, Side side) external onlyOwner returns (address) {
         require(side == Side.Short || side == Side.Long, "Invalid side");
+        require(address(leveragedTokensMap[token][side]) == address(0), "Already added");
 
         bytes32 salt = keccak256(abi.encodePacked(token, side));
         address instance = Clones.cloneDeterministic(address(leveragedTokenImpl), salt);

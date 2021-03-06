@@ -202,6 +202,9 @@ def test_add_lt(
     assert pool.leveragedTokens(0) == btcbull
     assert pool.leveragedTokens(1) == btcbear
 
+    with reverts("Already added"):
+        pool.addLeveragedToken(btc, LONG)
+
 
 @pytest.mark.parametrize("px1,px2", [(50000, 40000), (1e8, 1e7), (1, 1e1)])
 @pytest.mark.parametrize("qty", [1, 1e-8, 1e8])
