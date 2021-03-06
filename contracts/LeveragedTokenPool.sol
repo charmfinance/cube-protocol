@@ -18,6 +18,7 @@ import "../interfaces/AggregatorV3Interface.sol";
 // - clone lt
 
 // - test X/eth
+// - test admin methods
 
 // - add views
 // - getLeveragedTokenCost(..., amount)
@@ -46,8 +47,8 @@ contract LeveragedTokenPool is Ownable, ReentrancyGuard {
         uint256 lastNormPrice;
     }
 
-    ChainlinkFeedsRegistry feedRegistry;
     IERC20 baseToken;
+    ChainlinkFeedsRegistry feedRegistry;
 
     mapping(LeveragedToken => Params) public params;
 
@@ -61,9 +62,9 @@ contract LeveragedTokenPool is Ownable, ReentrancyGuard {
     uint256 public feesAccrued;
     bool public finalized;
 
-    constructor(address _feedRegistry, address _baseToken) {
-        feedRegistry = ChainlinkFeedsRegistry(_feedRegistry);
+    constructor(address _baseToken, address _feedRegistry) {
         baseToken = IERC20(_baseToken);
+        feedRegistry = ChainlinkFeedsRegistry(_feedRegistry);
     }
 
     function buy(
@@ -182,7 +183,7 @@ contract LeveragedTokenPool is Ownable, ReentrancyGuard {
         } else {
             squarePrice = uint256(1e52).div(price).div(price);
         }
-        require(squarePrice > 0, "Square price must be > 0");
+        require(squarePrice > 0, "Price must be > 0");
     }
 
     function addLeveragedToken(address token, Side side) external onlyOwner returns (address) {

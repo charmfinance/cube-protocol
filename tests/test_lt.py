@@ -113,27 +113,31 @@ def test_price_feed(a, LeveragedTokenPool, MockAggregatorV3Interface):
 
 
 def test_add_lt(
-    a, LeveragedTokenPool, LeveragedToken, MockToken, MockAggregatorV3Interface
+    a,
+    LeveragedTokenPool,
+    LeveragedToken,
+    ChainlinkFeedsRegistry,
+    MockToken,
+    MockAggregatorV3Interface,
 ):
     deployer, alice = a[:2]
 
     # deploy pool
-    pool = deployer.deploy(LeveragedTokenPool)
+    baseToken = deployer.deploy(MockToken, "USD Coin", "USDC", 6)
+    feedsRegistry = deployer.deploy(ChainlinkFeedsRegistry)
+    pool = deployer.deploy(LeveragedTokenPool, baseToken, feedsRegistry)
     btc = deployer.deploy(MockToken, "Bitcoin", "BTC", 8)
 
     with reverts("Ownable: caller is not the owner"):
         pool.addLeveragedToken(btc, LONG, {"from": alice})
 
-    with reverts("Feed not added"):
+    with reverts("Price must be > 0"):
         pool.addLeveragedToken(btc, LONG)
 
     btcusd = deployer.deploy(MockAggregatorV3Interface)
     btcusd.setPrice(50000 * 1e8)
-    pool.registerFeed("BTC", "USD", btcusd)
-
-    btcusd.setPrice(1e30)
-    with reverts("Price is too high. Might overflow later"):
-        pool.addLeveragedToken(btc, LONG)
+    feedsRegistry.addUsdFeed(btc, btcusd)
+    assert feedsRegistry.getPrice(btc) == 50000 * 1e8
 
     btcusd.setPrice(0)
     with reverts("Price should be > 0"):
@@ -150,20 +154,22 @@ def test_add_lt(
 
     (
         added,
-        tokenSymbol,
+        token,
         side,
         maxPoolShare,
         depositPaused,
         withdrawPaused,
-        lastSquarePrice,
+        initialSquarePrice,
+        lastNormPrice,
     ) = pool.params(btcbull)
     assert added
-    assert tokenSymbol == "BTC"
+    assert token == btc
     assert side == LONG
     assert maxPoolShare == 0
     assert not depositPaused
     assert not withdrawPaused
-    assert lastSquarePrice == 50000 ** 2 * 1e18
+    assert initialSquarePrice == 50000 ** 2 * 1e36
+    assert lastNormPrice == 1e18
 
     tx = pool.addLeveragedToken(btc, SHORT)
 
@@ -175,34 +181,35 @@ def test_add_lt(
 
     (
         added,
-        tokenSymbol,
+        token,
         side,
         maxPoolShare,
         depositPaused,
         withdrawPaused,
-        lastSquarePrice,
+        initialSquarePrice,
+        lastNormPrice,
     ) = pool.params(btcbear)
     assert added
-    assert tokenSymbol == "BTC"
+    assert token == btc
     assert side == SHORT
     assert maxPoolShare == 0
     assert not depositPaused
     assert not withdrawPaused
-    assert lastSquarePrice == 50000 ** -2 * 1e18
+    assert initialSquarePrice == 50000 ** -2 * 1e36
+    assert lastNormPrice == 1e18
 
     assert pool.numLeveragedTokens() == 2
     assert pool.leveragedTokens(0) == btcbull
     assert pool.leveragedTokens(1) == btcbear
-    assert pool.getLeveragedTokens() == [btcbull, btcbear]
 
 
 @pytest.mark.parametrize("px1,px2", [(50000, 40000), (1e8, 1e7), (1, 1e1)])
 @pytest.mark.parametrize("qty", [1, 1e-8, 1e8])
 def test_buy_sell(
     a,
-    ChainlinkFeedsRegistry,
     LeveragedTokenPool,
     LeveragedToken,
+    ChainlinkFeedsRegistry,
     MockToken,
     MockAggregatorV3Interface,
     px1,
@@ -212,9 +219,9 @@ def test_buy_sell(
     deployer, alice, bob = a[:3]
 
     # deploy pool
-    feedsRegistry = deployer.deploy(ChainlinkFeedsRegistry)
     baseToken = deployer.deploy(MockToken, "USD Coin", "USDC", 6)
-    pool = deployer.deploy(LeveragedTokenPool, feedsRegistry, baseToken)
+    feedsRegistry = deployer.deploy(ChainlinkFeedsRegistry)
+    pool = deployer.deploy(LeveragedTokenPool, baseToken, feedsRegistry)
     btc = deployer.deploy(MockToken, "Bitcoin", "BTC", 8)
 
     baseToken.mint(alice, 1e36)
