@@ -250,9 +250,6 @@ def test_buy_sell(
     pool.updateTradingFee(100)
     assert pool.tradingFee() == 100
 
-    with reverts("Cost should be > 0"):
-        pool.buy(btcbull, 0, alice, {"from": bob})
-
     sim = Sim()
     sim.squarePrices[btcbull] = px1 ** 2
     sim.squarePrices[btcbear] = px1 ** -2
@@ -314,9 +311,6 @@ def test_buy_sell(
     pool.updateAllPrices()
     assert approx(pool.totalValue()) == sim.totalValue()
 
-    with reverts("Quantity should be > 0"):
-        pool.sell(btcbull, 0, bob, {"from": alice})
-
     # check btc bull token price
     quantity = btcbull.balanceOf(alice)
     cost = sim.sell(btcbull, quantity / 1e18)
@@ -357,3 +351,10 @@ def test_buy_sell(
 
     pool.updateAllPrices()
     assert approx(pool.totalValue()) == 0
+
+    # buying 0 does nothing. it costs 1 because of rounding up
+    assert pool.buy(btcbull, 0, alice, {"from": bob}).return_value == 1
+
+    # selling 0 does nothing
+    assert pool.sell(btcbull, 0, bob, {"from": alice}).return_value == 0
+

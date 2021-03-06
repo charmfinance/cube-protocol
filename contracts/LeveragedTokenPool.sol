@@ -80,8 +80,7 @@ contract LeveragedTokenPool is Ownable, ReentrancyGuard {
         uint256 squarePrice = updatePrice(ltoken);
 
         // calculate number of shares
-        cost = quote(ltoken, quantity);
-        require(cost > 0, "Cost should be > 0");
+        cost = quote(ltoken, quantity).add(1);
 
         // add fees
         uint256 feeAmount = fee(cost);
@@ -120,7 +119,6 @@ contract LeveragedTokenPool is Ownable, ReentrancyGuard {
         Params storage _params = params[ltoken];
         require(_params.added, "Not added");
         require(!_params.sellPaused, "Paused");
-        require(quantity > 0, "Quantity should be > 0");
 
         uint256 squarePrice = updatePrice(ltoken);
 
@@ -206,12 +204,10 @@ contract LeveragedTokenPool is Ownable, ReentrancyGuard {
             buyPaused: false,
             sellPaused: false,
             initialSquarePrice: getSquarePrice(token, side),
-            lastPriceMove: 0
+            lastPriceMove: 1e18
         });
         leveragedTokens.push(ltoken);
         leveragedTokensMap[token][side] = ltoken;
-
-        updatePrice(ltoken);
         return address(ltoken);
     }
 
@@ -234,7 +230,7 @@ contract LeveragedTokenPool is Ownable, ReentrancyGuard {
 
     function buyQuote(LeveragedToken ltoken, uint256 shares) public view returns (uint256) {
         uint256 cost = quote(ltoken, shares);
-        return cost.add(fee(cost));
+        return cost.add(fee(cost)).add(1);
     }
 
     function sellQuote(LeveragedToken ltoken, uint256 shares) public view returns (uint256) {
@@ -246,12 +242,12 @@ contract LeveragedTokenPool is Ownable, ReentrancyGuard {
         return baseToken.balanceOf(address(this)).sub(feesAccrued);
     }
 
-    function setDepositPaused(LeveragedToken ltoken, bool paused) external onlyOwner {
+    function setBuyPaused(LeveragedToken ltoken, bool paused) external onlyOwner {
         require(params[ltoken].added, "Not added");
         params[ltoken].buyPaused = paused;
     }
 
-    function setWithdrawPaused(LeveragedToken ltoken, bool paused) external onlyOwner {
+    function setSellPaused(LeveragedToken ltoken, bool paused) external onlyOwner {
         require(params[ltoken].added, "Not added");
         params[ltoken].sellPaused = paused;
     }
