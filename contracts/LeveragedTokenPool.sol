@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity ^0.7.6;
+pragma solidity ^0.6.11;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/math/Math.sol";
@@ -63,7 +63,7 @@ contract LeveragedTokenPool is Ownable, ReentrancyGuard {
     uint256 public feesAccrued;
     bool public finalized;
 
-    constructor(address _baseToken, address _feedRegistry) {
+    constructor(address _baseToken, address _feedRegistry) public {
         baseToken = IERC20(_baseToken);
         feedRegistry = ChainlinkFeedsRegistry(_feedRegistry);
         leveragedTokenImpl = new LeveragedToken();
