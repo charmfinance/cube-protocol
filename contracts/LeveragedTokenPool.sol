@@ -91,14 +91,14 @@ contract LeveragedTokenPool is Ownable, ReentrancyGuard {
         feesAccrued = feesAccrued.add(feeAmount);
         cost = cost.add(feeAmount);
 
+        // update total value
+        totalValue = totalValue.add(quantity.mul(normPrice));
+
         // transfer in payment from sender
         baseToken.transferFrom(msg.sender, address(this), cost);
 
         // mint shares to recipient
         ltoken.mint(to, quantity);
-
-        // update total value
-        totalValue = totalValue.add(quantity.mul(normPrice));
 
         // check max pool share
         uint256 maxPoolShare = _params.maxPoolShare;
@@ -129,16 +129,16 @@ contract LeveragedTokenPool is Ownable, ReentrancyGuard {
         // calculate number of shares
         cost = quote(ltoken, quantity);
 
-        // burn shares from sender
-        ltoken.burn(msg.sender, quantity);
-
-        // update total value
-        totalValue = totalValue.sub(quantity.mul(normPrice));
-
         // subtract fees
         uint256 feeAmount = fee(cost);
         feesAccrued = feesAccrued.add(feeAmount);
         cost = cost.sub(feeAmount);
+
+        // update total value
+        totalValue = totalValue.sub(quantity.mul(normPrice));
+
+        // burn shares from sender
+        ltoken.burn(msg.sender, quantity);
 
         // transfer amount out to recipient
         baseToken.transfer(to, cost);
@@ -285,7 +285,7 @@ contract LeveragedTokenPool is Ownable, ReentrancyGuard {
     }
 
     function collectFee() external onlyOwner {
-        require(msg.sender.send(feesAccrued), "Transfer failed");
+        baseToken.transfer(msg.sender, feesAccrued);
         feesAccrued = 0;
     }
 
@@ -295,8 +295,7 @@ contract LeveragedTokenPool is Ownable, ReentrancyGuard {
 
     function emergencyWithdraw() external onlyOwner {
         require(!finalized, "Finalized");
-
-        uint256 balance = address(this).balance;
-        require(msg.sender.send(balance), "Transfer failed");
+        uint256 balance = baseToken.balanceOf(address(this));
+        baseToken.transfer(msg.sender, balance);
     }
 }
