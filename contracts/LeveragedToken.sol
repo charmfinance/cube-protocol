@@ -2,26 +2,17 @@
 
 pragma solidity ^0.7.6;
 
-import "@openzeppelin/contracts/math/SafeMath.sol";
-import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
-import "@openzeppelin/contracts/utils/Address.sol";
+import "@openzeppelin-upgradeable/contracts/token/ERC20/ERC20Upgradeable.sol";
 
-// TODO: minimal proxy / create2
-
-contract LeveragedToken is ERC20 {
-    using Address for address;
-    using SafeERC20 for IERC20;
-    using SafeMath for uint256;
-
+contract LeveragedToken is ERC20Upgradeable {
     address public pool;
 
-    constructor(
+    function initialize(
         address _pool,
         string memory name,
         string memory symbol
-    ) ERC20(name, symbol) {
+    ) public initializer {
+        __ERC20_init(name, symbol);
         pool = _pool;
     }
 

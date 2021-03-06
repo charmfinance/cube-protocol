@@ -5,7 +5,9 @@ pragma solidity ^0.7.6;
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/math/Math.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
+import "@openzeppelin/contracts/proxy/Clones.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/Address.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
@@ -49,6 +51,7 @@ contract LeveragedTokenPool is Ownable, ReentrancyGuard {
 
     IERC20 baseToken;
     ChainlinkFeedsRegistry feedRegistry;
+    LeveragedToken leveragedTokenImpl;
 
     mapping(LeveragedToken => Params) public params;
 
@@ -65,6 +68,10 @@ contract LeveragedTokenPool is Ownable, ReentrancyGuard {
     constructor(address _baseToken, address _feedRegistry) {
         baseToken = IERC20(_baseToken);
         feedRegistry = ChainlinkFeedsRegistry(_feedRegistry);
+        leveragedTokenImpl = new LeveragedToken();
+
+        // initialize with dummy data so that no one else can
+        leveragedTokenImpl.initialize(address(0), "", "");
     }
 
     function buy(
@@ -189,11 +196,15 @@ contract LeveragedTokenPool is Ownable, ReentrancyGuard {
     function addLeveragedToken(address token, Side side) external onlyOwner returns (address) {
         require(side == Side.Short || side == Side.Long, "Invalid side");
 
+        bytes32 salt = keccak256(abi.encodePacked(token, side));
+        address instance = Clones.cloneDeterministic(address(leveragedTokenImpl), salt);
+        LeveragedToken ltoken = LeveragedToken(instance);
+
         string memory name =
             string(abi.encodePacked("Charm 2X ", (side == Side.Long ? "Long " : "Short "), ERC20(token).name()));
         string memory symbol =
             string(abi.encodePacked("charm", ERC20(token).symbol(), (side == Side.Long ? "BULL" : "BEAR")));
-        LeveragedToken ltoken = new LeveragedToken(address(this), name, symbol);
+        ltoken.initialize(address(this), name, symbol);
 
         params[ltoken] = Params({
             added: true,
@@ -207,7 +218,7 @@ contract LeveragedTokenPool is Ownable, ReentrancyGuard {
         });
         leveragedTokens.push(ltoken);
         leveragedTokensMap[token][side] = ltoken;
-        return address(ltoken);
+        return instance;
     }
 
     function numLeveragedTokens() external view returns (uint256) {
