@@ -19,8 +19,6 @@ import "../interfaces/AggregatorV3Interface.sol";
 
 // - test X/eth
 
-// - max total value overflow
-
 // - add views
 // - getLeveragedTokenCost(..., amount)
 // - getLongLeveragedToken(token)
@@ -45,7 +43,7 @@ contract LeveragedTokenPool is Ownable, ReentrancyGuard {
         bool buyPaused;
         bool sellPaused;
         uint256 initialSquarePrice;
-        uint256 lastPriceMove;
+        uint256 lastNormPrice;
     }
 
     ChainlinkFeedsRegistry feedRegistry;
@@ -77,7 +75,7 @@ contract LeveragedTokenPool is Ownable, ReentrancyGuard {
         require(_params.added, "Not added");
         require(!_params.buyPaused, "Paused");
 
-        uint256 squarePrice = updatePrice(ltoken);
+        uint256 normPrice = updatePrice(ltoken);
 
         // calculate number of shares
         cost = quote(ltoken, quantity).add(1);
@@ -94,12 +92,12 @@ contract LeveragedTokenPool is Ownable, ReentrancyGuard {
         ltoken.mint(to, quantity);
 
         // update total value
-        totalValue = totalValue.add(quantity.mul(squarePrice));
+        totalValue = totalValue.add(quantity.mul(normPrice));
 
         // check max pool share
         uint256 maxPoolShare = _params.maxPoolShare;
         if (maxPoolShare > 0) {
-            uint256 ltokenValue = ltoken.totalSupply().mul(squarePrice);
+            uint256 ltokenValue = ltoken.totalSupply().mul(normPrice);
             require(ltokenValue.mul(1e4) <= maxPoolShare.mul(totalValue), "Max pool share exceeded");
         }
 
@@ -120,7 +118,7 @@ contract LeveragedTokenPool is Ownable, ReentrancyGuard {
         require(_params.added, "Not added");
         require(!_params.sellPaused, "Paused");
 
-        uint256 squarePrice = updatePrice(ltoken);
+        uint256 normPrice = updatePrice(ltoken);
 
         // calculate number of shares
         cost = quote(ltoken, quantity);
@@ -129,7 +127,7 @@ contract LeveragedTokenPool is Ownable, ReentrancyGuard {
         ltoken.burn(msg.sender, quantity);
 
         // update total value
-        totalValue = totalValue.sub(quantity.mul(squarePrice));
+        totalValue = totalValue.sub(quantity.mul(normPrice));
 
         // subtract fees
         uint256 feeAmount = fee(cost);
@@ -140,16 +138,16 @@ contract LeveragedTokenPool is Ownable, ReentrancyGuard {
         baseToken.transfer(to, cost);
     }
 
-    function updatePrice(LeveragedToken ltoken) public returns (uint256 priceMove) {
+    function updatePrice(LeveragedToken ltoken) public returns (uint256 normPrice) {
         Params storage _params = params[ltoken];
         require(_params.added, "Not added");
 
-        priceMove = getSquarePriceMove(ltoken);
-        uint256 lastPriceMove = _params.lastPriceMove;
+        normPrice = getNormalizedSquarePrice(ltoken);
+        uint256 lastNormPrice = _params.lastNormPrice;
         uint256 _totalSupply = ltoken.totalSupply();
 
-        totalValue = totalValue.sub(_totalSupply.mul(lastPriceMove)).add(_totalSupply.mul(priceMove));
-        _params.lastPriceMove = priceMove;
+        totalValue = totalValue.sub(_totalSupply.mul(lastNormPrice)).add(_totalSupply.mul(normPrice));
+        _params.lastNormPrice = normPrice;
     }
 
     // needs to be called regularly
@@ -158,9 +156,9 @@ contract LeveragedTokenPool is Ownable, ReentrancyGuard {
         for (uint256 i = 0; i < leveragedTokens.length; i = i.add(1)) {
             LeveragedToken ltoken = leveragedTokens[i];
 
-            uint256 priceMove = getSquarePriceMove(ltoken);
-            _totalValue = _totalValue.add(ltoken.totalSupply().mul(priceMove));
-            params[ltoken].lastPriceMove = priceMove;
+            uint256 normPrice = getNormalizedSquarePrice(ltoken);
+            _totalValue = _totalValue.add(ltoken.totalSupply().mul(normPrice));
+            params[ltoken].lastNormPrice = normPrice;
         }
 
         // save gas by only updating totalValue at the end
@@ -168,7 +166,7 @@ contract LeveragedTokenPool is Ownable, ReentrancyGuard {
     }
 
     // returns 18dp
-    function getSquarePriceMove(LeveragedToken ltoken) public view returns (uint256) {
+    function getNormalizedSquarePrice(LeveragedToken ltoken) public view returns (uint256) {
         Params storage _params = params[ltoken];
         require(_params.added, "Not added");
 
@@ -204,7 +202,7 @@ contract LeveragedTokenPool is Ownable, ReentrancyGuard {
             buyPaused: false,
             sellPaused: false,
             initialSquarePrice: getSquarePrice(token, side),
-            lastPriceMove: 1e18
+            lastNormPrice: 1e18
         });
         leveragedTokens.push(ltoken);
         leveragedTokensMap[token][side] = ltoken;
@@ -220,7 +218,7 @@ contract LeveragedTokenPool is Ownable, ReentrancyGuard {
         require(_params.added, "Not added");
 
         uint256 _totalValue = totalValue;
-        uint256 squarePrice = _params.lastPriceMove;
+        uint256 squarePrice = _params.lastNormPrice;
         return _totalValue > 0 ? shares.mul(squarePrice).mul(poolBalance()).div(_totalValue) : shares;
     }
 

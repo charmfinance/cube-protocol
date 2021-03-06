@@ -196,7 +196,7 @@ def test_add_lt(
     assert pool.getLeveragedTokens() == [btcbull, btcbear]
 
 
-@pytest.mark.parametrize("px1,px2", [(50000, 40000), (1e8, 2e8), (1, 2)])
+@pytest.mark.parametrize("px1,px2", [(50000, 40000), (1e8, 1e7), (1, 1e1)])
 @pytest.mark.parametrize("qty", [1, 1e-8, 1e8])
 def test_buy_sell(
     a,
@@ -232,20 +232,14 @@ def test_buy_sell(
     tx = pool.addLeveragedToken(btc, SHORT)
     btcbear = LeveragedToken.at(tx.return_value)
 
-    tx = pool.addLeveragedToken(btc, SHORT)
-    tx = pool.addLeveragedToken(btc, SHORT)
-    tx = pool.addLeveragedToken(btc, SHORT)
-    tx = pool.addLeveragedToken(btc, SHORT)
-    tx = pool.addLeveragedToken(btc, SHORT)
-    tx = pool.addLeveragedToken(btc, SHORT)
-    tx = pool.addLeveragedToken(btc, SHORT)
-    tx = pool.addLeveragedToken(btc, SHORT)
-
     with reverts("Not added"):
         pool.buy(ZERO_ADDRESS, 1, alice, {"from": bob})
 
     assert feedsRegistry.getPrice(btc) == px1 * 1e8
-    # assert pool.getSquarePrices(btc) == (px1 ** 2 * 1e24, px1 ** -2 * 1e24)
+    assert pool.getSquarePrice(btc, LONG) == px1 ** 2 * 1e36
+    assert pool.getSquarePrice(btc, SHORT) == px1 ** -2 * 1e36
+    assert pool.getNormalizedSquarePrice(btcbull) == 1e18
+    assert pool.getNormalizedSquarePrice(btcbear) == 1e18
 
     pool.updateTradingFee(100)
     assert pool.tradingFee() == 100
@@ -290,6 +284,7 @@ def test_buy_sell(
 
     # change oracle price
     btcusd.setPrice(px2 * 1e8)
+    assert feedsRegistry.getPrice(btc) == px2 * 1e8
     assert approx(baseToken.balanceOf(pool)) == sim.balance
     assert approx(pool.poolBalance()) == sim.poolBalance
     assert approx(pool.totalValue()) == sim.totalValue()
@@ -300,6 +295,8 @@ def test_buy_sell(
     assert approx(baseToken.balanceOf(pool)) == sim.balance
     assert approx(pool.poolBalance()) == sim.poolBalance
     assert approx(pool.totalValue()) == sim.totalValue()
+    assert pool.getSquarePrice(btc, LONG) == px2 ** 2 * 1e36
+    assert pool.getNormalizedSquarePrice(btcbull) == px2 ** 2 / px1 ** 2 * 1e18
 
     # update btc bear price
     pool.updatePrice(btcbear)
@@ -307,6 +304,11 @@ def test_buy_sell(
     assert approx(baseToken.balanceOf(pool)) == sim.balance
     assert approx(pool.poolBalance()) == sim.poolBalance
     assert approx(pool.totalValue()) == sim.totalValue()
+    assert feedsRegistry.getPrice(btc) == px2 * 1e8
+    assert approx(pool.getSquarePrice(btc, SHORT)) == px2 ** -2 * 1e36
+    assert (
+        approx(pool.getNormalizedSquarePrice(btcbear)) == px2 ** -2 / px1 ** -2 * 1e18
+    )
 
     pool.updateAllPrices()
     assert approx(pool.totalValue()) == sim.totalValue()
@@ -357,4 +359,3 @@ def test_buy_sell(
 
     # selling 0 does nothing
     assert pool.sell(btcbull, 0, bob, {"from": alice}).return_value == 0
-
