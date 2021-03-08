@@ -7,10 +7,10 @@ import "./LPool.sol";
 
 contract LViews {
     function getLTokens(LPool lpool) external view returns (LToken[] memory ltokens) {
-        uint256 n = lpool.ltokensLength();
+        uint256 n = lpool.numLTokens();
         ltokens = new LToken[](n);
         for (uint256 i = 0; i < n; i++) {
-            ltokens[i] = lpool.ltokens(i);
+            ltokens[i] = lpool.lTokens(i);
         }
     }
 

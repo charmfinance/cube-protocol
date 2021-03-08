@@ -24,23 +24,37 @@ import "../interfaces/AggregatorV3Interface.sol";
 // - getLeveragedTokenCost(..., amount)
 // - getLongLeveragedToken(token)
 
-// - add docs
-// - add events
-
 // - check syntehtix oracle chekcs
 
+/**
+ * @title Leveraged Token Pool
+ * @notice A pool that lets users buy and sell leveraged tokens
+ */
 contract LPool is Ownable, ReentrancyGuard {
     using Address for address;
     using SafeERC20 for IERC20;
     using SafeMath for uint256;
 
+    event Trade(
+        address indexed sender,
+        address indexed to,
+        IERC20 baseToken,
+        LToken lToken,
+        bool isBuy,
+        uint256 quantity,
+        uint256 cost,
+        uint256 feeAmount
+    );
+    event UpdatePrice(LToken lToken, uint256 price);
+    event AddLToken(LToken lToken, address underlyingToken, Side side, string name, string symbol);
+
     enum Side {Long, Short}
 
     struct Params {
-        bool added;
-        address token;
+        bool added; // always set to true; used to check existence
+        address underlyingToken;
         Side side;
-        uint256 maxPoolShare; // expressed in basis points, 0 means no limit
+        uint256 maxPoolShare; // expressed in basis points; 0 means no limit
         bool buyPaused;
         bool sellPaused;
         uint256 priceOffset;
@@ -50,11 +64,11 @@ contract LPool is Ownable, ReentrancyGuard {
 
     IERC20 baseToken;
     ChainlinkFeedsRegistry feedRegistry;
-    LToken leveragedTokenImpl;
+    LToken lTokenImpl;
 
     mapping(LToken => Params) public params;
 
-    LToken[] public ltokens;
+    LToken[] public lTokens;
     mapping(address => mapping(Side => LToken)) public leveragedTokensMap;
 
     uint256 public tradingFee; // expressed in basis points
@@ -64,127 +78,151 @@ contract LPool is Ownable, ReentrancyGuard {
     uint256 public feesAccrued;
     bool public finalized;
 
+    /**
+     * @param _baseToken The token held by this contract. Users buy and sell leveraged
+     * tokens with `baseToken`
+     * @param _feedRegistry The `ChainlinkFeedsRegistry` contract that stores
+     * chainlink feed addresses
+     */
     constructor(address _baseToken, address _feedRegistry) public {
         baseToken = IERC20(_baseToken);
         feedRegistry = ChainlinkFeedsRegistry(_feedRegistry);
-        leveragedTokenImpl = new LToken();
+        lTokenImpl = new LToken();
 
         // initialize with dummy data so that no one else can
-        leveragedTokenImpl.initialize(address(0), "", "");
+        lTokenImpl.initialize(address(0), "", "");
     }
 
+    /**
+     * @notice Buy leveraged tokens
+     * @param lToken The leveraged token to buy
+     * @param quantity The quantity of leveraged tokens to buy
+     * @param to The address that receives the leveraged tokens
+     */
     function buy(
-        LToken ltoken,
+        LToken lToken,
         uint256 quantity,
         address to
     ) external nonReentrant returns (uint256 cost) {
-        Params storage _params = params[ltoken];
+        Params storage _params = params[lToken];
         require(_params.added, "Not added");
         require(!_params.buyPaused, "Paused");
 
-        uint256 ltPrice = updatePrice(ltoken);
+        uint256 price = updatePrice(lToken);
+        cost = quote(lToken, quantity).add(1);
 
-        // calculate number of shares
-        cost = quote(ltoken, quantity).add(1);
-
-        // add fees
         uint256 feeAmount = fee(cost);
         feesAccrued = feesAccrued.add(feeAmount);
         cost = cost.add(feeAmount);
 
-        // update total value
-        totalValue = totalValue.add(quantity.mul(ltPrice));
-
-        // transfer in payment from sender
+        totalValue = totalValue.add(quantity.mul(price));
         baseToken.transferFrom(msg.sender, address(this), cost);
+        lToken.mint(to, quantity);
 
-        // mint shares to recipient
-        ltoken.mint(to, quantity);
-
-        // check max pool share
+        // `maxPoolShare` being 0 means no limit
         uint256 maxPoolShare = _params.maxPoolShare;
         if (maxPoolShare > 0) {
-            uint256 ltokenValue = ltoken.totalSupply().mul(ltPrice);
-            require(ltokenValue.mul(1e4) <= maxPoolShare.mul(totalValue), "Max pool share exceeded");
+            uint256 lTokenValue = lToken.totalSupply().mul(price);
+            require(lTokenValue.mul(1e4) <= maxPoolShare.mul(totalValue), "Max pool share exceeded");
         }
 
-        // check max tvl
+        // `maxTvl` being 0 means no limit
         if (maxTvl > 0) {
             require(poolBalance() <= maxTvl, "Max TVL exceeded");
         }
 
+        emit Trade(msg.sender, to, baseToken, lToken, true, quantity, cost, feeAmount);
         return cost;
     }
 
+    /**
+     * @notice Sell leveraged tokens
+     * @param lToken The leveraged token to sell
+     * @param quantity The quantity of leveraged tokens to sell
+     * @param to The address that receives the sale amount
+     */
     function sell(
-        LToken ltoken,
+        LToken lToken,
         uint256 quantity,
         address to
     ) external nonReentrant returns (uint256 cost) {
-        Params storage _params = params[ltoken];
+        Params storage _params = params[lToken];
         require(_params.added, "Not added");
         require(!_params.sellPaused, "Paused");
 
-        uint256 ltPrice = updatePrice(ltoken);
+        uint256 price = updatePrice(lToken);
+        cost = quote(lToken, quantity);
 
-        // calculate number of shares
-        cost = quote(ltoken, quantity);
-
-        // subtract fees
         uint256 feeAmount = fee(cost);
         feesAccrued = feesAccrued.add(feeAmount);
         cost = cost.sub(feeAmount);
 
-        // update total value
-        totalValue = totalValue.sub(quantity.mul(ltPrice));
-
-        // burn shares from sender
-        ltoken.burn(msg.sender, quantity);
-
-        // transfer amount out to recipient
+        totalValue = totalValue.sub(quantity.mul(price));
+        lToken.burn(msg.sender, quantity);
         baseToken.transfer(to, cost);
+
+        emit Trade(msg.sender, to, baseToken, lToken, false, quantity, cost, feeAmount);
     }
 
-    function updatePrice(LToken ltoken) public returns (uint256 ltPrice) {
-        Params storage _params = params[ltoken];
+    /**
+     * @notice Update the stored leveraged token price and total value. It is
+     * automatically called when this leveraged token is bought or sold. However
+     * if it has not been traded for a while, it should be called periodically
+     * so that the total value does get too far out of sync
+     * @param lToken The leveraged token whose price is updated
+     */
+    function updatePrice(LToken lToken) public returns (uint256 price) {
+        Params storage _params = params[lToken];
         require(_params.added, "Not added");
 
-        uint256 underlyingPrice = feedRegistry.getPrice(_params.token);
-
-        // returns 36dp
+        uint256 underlyingPrice = feedRegistry.getPrice(_params.underlyingToken);
         uint256 square = underlyingPrice.mul(underlyingPrice);
+
+        // invert price for short tokens and convert to 36dp
         uint256 squareOrInv = _params.side == Side.Long ? square.mul(1e20) : uint256(1e52).div(square);
         require(squareOrInv > 0, "Price must be > 0");
 
+        // set priceOffset the first time this method is called for this leveraged token
         uint256 priceOffset = _params.priceOffset;
         if (priceOffset == 0) {
             priceOffset = _params.priceOffset = squareOrInv;
         }
-        ltPrice = squareOrInv.mul(1e18).div(priceOffset);
 
-        uint256 _totalSupply = ltoken.totalSupply();
-        totalValue = totalValue.sub(_totalSupply.mul(_params.lastPrice)).add(_totalSupply.mul(ltPrice));
-        _params.lastPrice = ltPrice;
+        // divide by the initial price to avoid extremely high or low prices
+        price = squareOrInv.mul(1e18).div(priceOffset);
+
+        uint256 _totalSupply = lToken.totalSupply();
+        totalValue = totalValue.sub(_totalSupply.mul(_params.lastPrice)).add(_totalSupply.mul(price));
+        _params.lastPrice = price;
         _params.lastUpdated = block.timestamp;
+
+        emit UpdatePrice(lToken, price);
     }
 
-    function addLToken(address token, Side side) external onlyOwner returns (address) {
+    /**
+     * @notice Add a new leveraged token. Can only be called by owner
+     * @param underlyingToken The ERC-20 whose price is used
+     * @param side Long or short
+     */
+    function addLToken(address underlyingToken, Side side) external onlyOwner returns (address) {
         require(side == Side.Short || side == Side.Long, "Invalid side");
-        require(address(leveragedTokensMap[token][side]) == address(0), "Already added");
+        require(address(leveragedTokensMap[underlyingToken][side]) == address(0), "Already added");
 
-        bytes32 salt = keccak256(abi.encodePacked(token, side));
-        address instance = Clones.cloneDeterministic(address(leveragedTokenImpl), salt);
-        LToken ltoken = LToken(instance);
+        bytes32 salt = keccak256(abi.encodePacked(underlyingToken, side));
+        address instance = Clones.cloneDeterministic(address(lTokenImpl), salt);
+        LToken lToken = LToken(instance);
 
         string memory name =
-            string(abi.encodePacked("Charm 2X ", (side == Side.Long ? "Long " : "Short "), ERC20(token).name()));
+            string(
+                abi.encodePacked("Charm 2X ", (side == Side.Long ? "Long " : "Short "), ERC20(underlyingToken).name())
+            );
         string memory symbol =
-            string(abi.encodePacked("charm", ERC20(token).symbol(), (side == Side.Long ? "BULL" : "BEAR")));
-        ltoken.initialize(address(this), name, symbol);
+            string(abi.encodePacked("charm", ERC20(underlyingToken).symbol(), (side == Side.Long ? "BULL" : "BEAR")));
+        lToken.initialize(address(this), name, symbol);
 
-        params[ltoken] = Params({
+        params[lToken] = Params({
             added: true,
-            token: token,
+            underlyingToken: underlyingToken,
             side: side,
             maxPoolShare: 0,
             buyPaused: false,
@@ -193,65 +231,91 @@ contract LPool is Ownable, ReentrancyGuard {
             lastPrice: 0,
             lastUpdated: 0
         });
-        ltokens.push(ltoken);
-        leveragedTokensMap[token][side] = ltoken;
+        lTokens.push(lToken);
+        leveragedTokensMap[underlyingToken][side] = lToken;
 
-        updatePrice(ltoken);
+        updatePrice(lToken);
+        emit AddLToken(lToken, underlyingToken, side, name, symbol);
         return instance;
     }
 
-    function ltokensLength() external view returns (uint256) {
-        return ltokens.length;
-    }
-
-    function quote(LToken ltoken, uint256 shares) public view returns (uint256 cost) {
-        Params storage _params = params[ltoken];
+    /**
+     * @notice Amount received by selling leveraged tokens
+     * @param lToken The leveraged token sold
+     * @param quantity The quantity of leveraged tokens sold
+     */
+    function quote(LToken lToken, uint256 quantity) public view returns (uint256 cost) {
+        Params storage _params = params[lToken];
         require(_params.added, "Not added");
 
         uint256 _totalValue = totalValue;
-        return _totalValue > 0 ? shares.mul(_params.lastPrice).mul(poolBalance()).div(_totalValue) : shares;
+        return _totalValue > 0 ? quantity.mul(_params.lastPrice).mul(poolBalance()).div(_totalValue) : quantity;
     }
 
+    /**
+     * @notice Fee paid to buy or sell leveraged tokens
+     * @param cost Amount of `baseToken` paid or received when buying or selling
+     */
     function fee(uint256 cost) public view returns (uint256) {
         return cost.mul(tradingFee).div(1e4);
     }
 
-    function buyQuote(LToken ltoken, uint256 shares) public view returns (uint256) {
-        uint256 cost = quote(ltoken, shares).add(1);
+    /**
+     * @notice Cost to buy leveraged tokens
+     * @param lToken Leveraged token bought
+     * @param quantity Quantity of leveraged tokens bought
+     */
+    function buyQuote(LToken lToken, uint256 quantity) public view returns (uint256) {
+        uint256 cost = quote(lToken, quantity).add(1);
         return cost.add(fee(cost));
     }
 
-    function sellQuote(LToken ltoken, uint256 shares) public view returns (uint256) {
-        uint256 cost = quote(ltoken, shares);
+    /**
+     * @notice Amount received by selling leveraged tokens
+     * @param lToken Leveraged token sold
+     * @param quantity Quantity of leveraged tokens sold
+     */
+    function sellQuote(LToken lToken, uint256 quantity) public view returns (uint256) {
+        uint256 cost = quote(lToken, quantity);
         return cost.sub(fee(cost));
     }
 
+    /**
+     * @notice Balance of the pool owned by leveraged token holders
+     */
     function poolBalance() public view returns (uint256) {
         return baseToken.balanceOf(address(this)).sub(feesAccrued);
     }
 
-    function setBuyPaused(LToken ltoken, bool paused) external onlyOwner {
-        require(params[ltoken].added, "Not added");
-        params[ltoken].buyPaused = paused;
+    /**
+     * @notice Number of leveraged tokens in the pool
+     */
+    function numLTokens() external view returns (uint256) {
+        return lTokens.length;
     }
 
-    function setSellPaused(LToken ltoken, bool paused) external onlyOwner {
-        require(params[ltoken].added, "Not added");
-        params[ltoken].sellPaused = paused;
+    function setBuyPaused(LToken lToken, bool paused) external onlyOwner {
+        require(params[lToken].added, "Not added");
+        params[lToken].buyPaused = paused;
+    }
+
+    function setSellPaused(LToken lToken, bool paused) external onlyOwner {
+        require(params[lToken].added, "Not added");
+        params[lToken].sellPaused = paused;
     }
 
     function pauseAll() external onlyOwner {
-        for (uint256 i = 0; i < ltokens.length; i = i.add(1)) {
-            LToken ltoken = ltokens[i];
-            params[ltoken].buyPaused = true;
-            params[ltoken].sellPaused = true;
+        for (uint256 i = 0; i < lTokens.length; i = i.add(1)) {
+            LToken lToken = lTokens[i];
+            params[lToken].buyPaused = true;
+            params[lToken].sellPaused = true;
         }
     }
 
-    function updateMaxPoolShare(LToken ltoken, uint256 maxPoolShare) external onlyOwner {
-        require(params[ltoken].added, "Not added");
+    function updateMaxPoolShare(LToken lToken, uint256 maxPoolShare) external onlyOwner {
+        require(params[lToken].added, "Not added");
         require(maxPoolShare < 1e4, "Max pool share should be < 100%");
-        params[ltoken].maxPoolShare = maxPoolShare;
+        params[lToken].maxPoolShare = maxPoolShare;
     }
 
     function updateMaxTvl(uint256 _maxTvl) external onlyOwner {

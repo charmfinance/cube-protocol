@@ -149,8 +149,8 @@ def test_add_lt(
     btcbull = LToken.at(tx.return_value)
     assert btcbull.name() == "Charm 2X Long Bitcoin"
     assert btcbull.symbol() == "charmBTCBULL"
-    assert pool.ltokensLength() == 1
-    assert pool.ltokens(0) == btcbull
+    assert pool.numLTokens() == 1
+    assert pool.lTokens(0) == btcbull
 
     (
         added,
@@ -176,8 +176,8 @@ def test_add_lt(
     btcbear = LToken.at(tx.return_value)
     assert btcbear.name() == "Charm 2X Short Bitcoin"
     assert btcbear.symbol() == "charmBTCBEAR"
-    assert pool.ltokensLength() == 2
-    assert pool.ltokens(1) == btcbear
+    assert pool.numLTokens() == 2
+    assert pool.lTokens(1) == btcbear
 
     (
         added,
@@ -198,9 +198,9 @@ def test_add_lt(
     assert initialSquarePrice == 50000 ** -2 * 1e36
     assert lastNormPrice == 1e18
 
-    assert pool.ltokensLength() == 2
-    assert pool.ltokens(0) == btcbull
-    assert pool.ltokens(1) == btcbear
+    assert pool.numLTokens() == 2
+    assert pool.lTokens(0) == btcbull
+    assert pool.lTokens(1) == btcbear
 
     with reverts("Already added"):
         pool.addLToken(btc, LONG)
