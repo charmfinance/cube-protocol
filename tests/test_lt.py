@@ -51,7 +51,7 @@ class Sim(object):
         return tv * 1e36
 
 
-def test_price_feed(a, LeveragedTokenPool, MockAggregatorV3Interface):
+def test_price_feed(a, LPool, MockAggregatorV3Interface):
     deployer, alice = a[:2]
 
     aaausd = deployer.deploy(MockAggregatorV3Interface)
@@ -60,7 +60,7 @@ def test_price_feed(a, LeveragedTokenPool, MockAggregatorV3Interface):
     cccusd = deployer.deploy(MockAggregatorV3Interface)
     ethusd = deployer.deploy(MockAggregatorV3Interface)
 
-    pool = deployer.deploy(LeveragedTokenPool)
+    pool = deployer.deploy(LPool)
 
     with reverts("Ownable: caller is not the owner"):
         pool.registerFeed("AAA", "USD", aaausd, {"from": alice})
@@ -114,8 +114,8 @@ def test_price_feed(a, LeveragedTokenPool, MockAggregatorV3Interface):
 
 def test_add_lt(
     a,
-    LeveragedTokenPool,
-    LeveragedToken,
+    LPool,
+    LToken,
     ChainlinkFeedsRegistry,
     MockToken,
     MockAggregatorV3Interface,
@@ -125,14 +125,14 @@ def test_add_lt(
     # deploy pool
     baseToken = deployer.deploy(MockToken, "USD Coin", "USDC", 6)
     feedsRegistry = deployer.deploy(ChainlinkFeedsRegistry)
-    pool = deployer.deploy(LeveragedTokenPool, baseToken, feedsRegistry)
+    pool = deployer.deploy(LPool, baseToken, feedsRegistry)
     btc = deployer.deploy(MockToken, "Bitcoin", "BTC", 8)
 
     with reverts("Ownable: caller is not the owner"):
-        pool.addLeveragedToken(btc, LONG, {"from": alice})
+        pool.addLToken(btc, LONG, {"from": alice})
 
     with reverts("Price must be > 0"):
-        pool.addLeveragedToken(btc, LONG)
+        pool.addLToken(btc, LONG)
 
     btcusd = deployer.deploy(MockAggregatorV3Interface)
     btcusd.setPrice(50000 * 1e8)
@@ -141,16 +141,16 @@ def test_add_lt(
 
     btcusd.setPrice(0)
     with reverts("Price should be > 0"):
-        pool.addLeveragedToken(btc, LONG)
+        pool.addLToken(btc, LONG)
 
     btcusd.setPrice(50000 * 1e8)
-    tx = pool.addLeveragedToken(btc, LONG)
+    tx = pool.addLToken(btc, LONG)
 
-    btcbull = LeveragedToken.at(tx.return_value)
+    btcbull = LToken.at(tx.return_value)
     assert btcbull.name() == "Charm 2X Long Bitcoin"
     assert btcbull.symbol() == "charmBTCBULL"
-    assert pool.numLeveragedTokens() == 1
-    assert pool.leveragedTokens(0) == btcbull
+    assert pool.ltokensLength() == 1
+    assert pool.ltokens(0) == btcbull
 
     (
         added,
@@ -171,13 +171,13 @@ def test_add_lt(
     assert initialSquarePrice == 50000 ** 2 * 1e36
     assert lastNormPrice == 1e18
 
-    tx = pool.addLeveragedToken(btc, SHORT)
+    tx = pool.addLToken(btc, SHORT)
 
-    btcbear = LeveragedToken.at(tx.return_value)
+    btcbear = LToken.at(tx.return_value)
     assert btcbear.name() == "Charm 2X Short Bitcoin"
     assert btcbear.symbol() == "charmBTCBEAR"
-    assert pool.numLeveragedTokens() == 2
-    assert pool.leveragedTokens(1) == btcbear
+    assert pool.ltokensLength() == 2
+    assert pool.ltokens(1) == btcbear
 
     (
         added,
@@ -198,20 +198,20 @@ def test_add_lt(
     assert initialSquarePrice == 50000 ** -2 * 1e36
     assert lastNormPrice == 1e18
 
-    assert pool.numLeveragedTokens() == 2
-    assert pool.leveragedTokens(0) == btcbull
-    assert pool.leveragedTokens(1) == btcbear
+    assert pool.ltokensLength() == 2
+    assert pool.ltokens(0) == btcbull
+    assert pool.ltokens(1) == btcbear
 
     with reverts("Already added"):
-        pool.addLeveragedToken(btc, LONG)
+        pool.addLToken(btc, LONG)
 
 
 @pytest.mark.parametrize("px1,px2", [(50000, 40000), (1e8, 1e7), (1, 1e1)])
 @pytest.mark.parametrize("qty", [1, 1e-8, 1e8])
 def test_buy_sell(
     a,
-    LeveragedTokenPool,
-    LeveragedToken,
+    LPool,
+    LToken,
     ChainlinkFeedsRegistry,
     MockToken,
     MockAggregatorV3Interface,
@@ -224,7 +224,7 @@ def test_buy_sell(
     # deploy pool
     baseToken = deployer.deploy(MockToken, "USD Coin", "USDC", 6)
     feedsRegistry = deployer.deploy(ChainlinkFeedsRegistry)
-    pool = deployer.deploy(LeveragedTokenPool, baseToken, feedsRegistry)
+    pool = deployer.deploy(LPool, baseToken, feedsRegistry)
     btc = deployer.deploy(MockToken, "Bitcoin", "BTC", 8)
 
     baseToken.mint(alice, 1e36)
@@ -236,20 +236,16 @@ def test_buy_sell(
     btcusd.setPrice(px1 * 1e8)
     feedsRegistry.addUsdFeed(btc, btcusd)
 
-    tx = pool.addLeveragedToken(btc, LONG)
-    btcbull = LeveragedToken.at(tx.return_value)
+    tx = pool.addLToken(btc, LONG)
+    btcbull = LToken.at(tx.return_value)
 
-    tx = pool.addLeveragedToken(btc, SHORT)
-    btcbear = LeveragedToken.at(tx.return_value)
+    tx = pool.addLToken(btc, SHORT)
+    btcbear = LToken.at(tx.return_value)
 
     with reverts("Not added"):
         pool.buy(ZERO_ADDRESS, 1, alice, {"from": bob})
 
     assert feedsRegistry.getPrice(btc) == px1 * 1e8
-    assert pool.getSquarePrice(btc, LONG) == px1 ** 2 * 1e36
-    assert pool.getSquarePrice(btc, SHORT) == px1 ** -2 * 1e36
-    assert pool.getNormalizedSquarePrice(btcbull) == 1e18
-    assert pool.getNormalizedSquarePrice(btcbear) == 1e18
 
     pool.updateTradingFee(100)
     assert pool.tradingFee() == 100
@@ -305,22 +301,12 @@ def test_buy_sell(
     assert approx(baseToken.balanceOf(pool)) == sim.balance
     assert approx(pool.poolBalance()) == sim.poolBalance
     assert approx(pool.totalValue()) == sim.totalValue()
-    assert pool.getSquarePrice(btc, LONG) == px2 ** 2 * 1e36
-    assert pool.getNormalizedSquarePrice(btcbull) == px2 ** 2 / px1 ** 2 * 1e18
 
     # update btc bear price
     pool.updatePrice(btcbear)
     sim.squarePrices[btcbear] = px2 ** -2
     assert approx(baseToken.balanceOf(pool)) == sim.balance
     assert approx(pool.poolBalance()) == sim.poolBalance
-    assert approx(pool.totalValue()) == sim.totalValue()
-    assert feedsRegistry.getPrice(btc) == px2 * 1e8
-    assert approx(pool.getSquarePrice(btc, SHORT)) == px2 ** -2 * 1e36
-    assert (
-        approx(pool.getNormalizedSquarePrice(btcbear)) == px2 ** -2 / px1 ** -2 * 1e18
-    )
-
-    pool.updateAllPrices()
     assert approx(pool.totalValue()) == sim.totalValue()
 
     # check btc bull token price
@@ -359,9 +345,6 @@ def test_buy_sell(
     assert approx(btcbear.balanceOf(alice)) == 0
     assert approx(baseToken.balanceOf(pool)) == sim.balance
     assert approx(pool.poolBalance()) == 0
-    assert approx(pool.totalValue()) == 0
-
-    pool.updateAllPrices()
     assert approx(pool.totalValue()) == 0
 
     # buying 0 does nothing. it costs 1 because of rounding up

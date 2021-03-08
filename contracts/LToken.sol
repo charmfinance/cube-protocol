@@ -4,7 +4,7 @@ pragma solidity ^0.6.11;
 
 import "@openzeppelin-upgradeable/contracts/token/ERC20/ERC20Upgradeable.sol";
 
-contract LeveragedToken is ERC20Upgradeable {
+contract LToken is ERC20Upgradeable {
     address public pool;
 
     function initialize(

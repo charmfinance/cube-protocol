@@ -2,15 +2,15 @@
 
 pragma solidity ^0.6.11;
 
-import "./LeveragedToken.sol";
-import "./LeveragedTokenPool.sol";
+import "./LToken.sol";
+import "./LPool.sol";
 
-contract LeveragedTokenPoolViews {
-    function getLeveragedTokens(LeveragedTokenPool pool) external view returns (LeveragedToken[] memory ltokens) {
-        uint256 n = pool.numLeveragedTokens();
-        ltokens = new LeveragedToken[](n);
+contract LViews {
+    function getLTokens(LPool lpool) external view returns (LToken[] memory ltokens) {
+        uint256 n = lpool.ltokensLength();
+        ltokens = new LToken[](n);
         for (uint256 i = 0; i < n; i++) {
-            ltokens[i] = pool.leveragedTokens(i);
+            ltokens[i] = lpool.ltokens(i);
         }
     }
 
@@ -24,7 +24,7 @@ contract LeveragedTokenPoolViews {
     //     uint256 n = leveragedTokens.length;
     //     prices = new uint256[n];
     //     for (uint256 i = 0; i < n; i++) {
-    //         LeveragedToken ltoken = leveragedTokens[i];
+    //         LToken ltoken = leveragedTokens[i];
     //         prices[i] = getLeveragedTokenPrice(ltoken.token(), ltoken.side());
     //     }
     // }
@@ -33,12 +33,12 @@ contract LeveragedTokenPoolViews {
     //     uint256 n = leveragedTokens.length;
     //     values = new uint256[n];
     //     for (uint256 i = 0; i < n; i++) {
-    //         LeveragedToken ltoken = leveragedTokens[i];
+    //         LToken ltoken = leveragedTokens[i];
     //         values[i] = getLeveragedTokenPrices(ltoken).mul(ltoken.totalSupply());
     //     }
     // }
 
-    // function getAccountValues(LeveragedToken ltoken, address account) external view returns (uint256 values) {
+    // function getAccountValues(LToken ltoken, address account) external view returns (uint256 values) {
     //     uint256 n = leveragedTokens.length;
     //     values = new uint256[n];
     //     for (uint256 i = 0; i < n; i++) {
