@@ -20,12 +20,6 @@ import "../interfaces/AggregatorV3Interface.sol";
 // - test X/eth
 // - test admin methods
 
-// - add views
-// - getLeveragedTokenCost(..., amount)
-// - getLongLeveragedToken(token)
-
-// - check syntehtix oracle chekcs
-
 /**
  * @title Leveraged Token Pool
  * @notice A pool that lets users buy and sell leveraged tokens
@@ -189,6 +183,7 @@ contract LPool is Ownable, ReentrancyGuard {
         }
 
         // divide by the initial price to avoid extremely high or low prices
+        // price decimals is now 18dp
         price = squareOrInv.mul(1e18).div(priceOffset);
 
         uint256 _totalSupply = lToken.totalSupply();

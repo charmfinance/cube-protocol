@@ -1,4 +1,4 @@
-from brownie import reverts, ZERO_ADDRESS
+from brownie import chain, reverts, ZERO_ADDRESS
 from collections import defaultdict
 import pytest
 from pytest import approx
@@ -10,10 +10,11 @@ LONG, SHORT = 0, 1
 class Sim(object):
     def __init__(self):
         self.quantities = defaultdict(int)
-        self.squarePrices = defaultdict(int)
-        self.initialSquarePrices = defaultdict(int)
+        self.prices = defaultdict(int)
+        self.initialPrices = defaultdict(int)
         self.balance = 0
         self.poolBalance = 0
+        self.feesAccrued = 0
 
     def buy(self, symbol, quantity):
         return self._trade(symbol, quantity, 1) * 1.01
@@ -22,19 +23,20 @@ class Sim(object):
         return self._trade(symbol, quantity, -1) * 0.99
 
     def _trade(self, symbol, quantity, sign):
-        cost = quantity * self._px(symbol)
+        cost = quantity * self.px(symbol)
         self.quantities[symbol] += sign * quantity
         self.balance += sign * cost * 1e18
         self.balance += cost * 1e16
         self.poolBalance += sign * cost * 1e18
+        self.feesAccrued += cost * 1e16
         return cost * 1e18
 
-    def _px(self, symbol):
+    def px(self, symbol):
         if self.totalValue() > 0:
             return (
-                self.squarePrices[symbol]
+                self.prices[symbol]
                 * self.poolBalance
-                / self.initialSquarePrices[symbol]
+                / self.initialPrices[symbol]
                 / self.totalValue()
                 * 1e18
             )
@@ -44,72 +46,11 @@ class Sim(object):
     def totalValue(self):
         tv = sum(
             self.quantities[symbol]
-            * self.squarePrices[symbol]
-            / self.initialSquarePrices[symbol]
+            * self.prices[symbol]
+            / self.initialPrices[symbol]
             for symbol in self.quantities
         )
         return tv * 1e36
-
-
-def test_price_feed(a, LPool, MockAggregatorV3Interface):
-    deployer, alice = a[:2]
-
-    aaausd = deployer.deploy(MockAggregatorV3Interface)
-    aaaeth = deployer.deploy(MockAggregatorV3Interface)
-    bbbeth = deployer.deploy(MockAggregatorV3Interface)
-    cccusd = deployer.deploy(MockAggregatorV3Interface)
-    ethusd = deployer.deploy(MockAggregatorV3Interface)
-
-    pool = deployer.deploy(LPool)
-
-    with reverts("Ownable: caller is not the owner"):
-        pool.registerFeed("AAA", "USD", aaausd, {"from": alice})
-    with reverts("Price should be > 0"):
-        pool.registerFeed("AAA", "USD", aaausd)
-    with reverts("Base symbol should not be empty"):
-        pool.registerFeed("", "USD", aaausd)
-    with reverts("Quote symbol should not be empty"):
-        pool.registerFeed("BTC", "", aaausd)
-
-    aaausd.setPrice(0.1 * 1e8)
-    aaaeth.setPrice(0.0000555 * 1e18)
-    bbbeth.setPrice(10 * 1e18)
-    cccusd.setPrice(100 * 1e8)
-    ethusd.setPrice(2000 * 1e8)
-
-    pool.registerFeed("AAA", "USD", aaausd)
-    pool.registerFeed("AAA", "ETH", aaaeth)
-    pool.registerFeed("BBB", "ETH", bbbeth)
-    pool.registerFeed("CCC", "USD", cccusd)
-
-    assert pool.getUnderlyingPrice("AAA") == 0.1 * 1e18
-    assert pool.getUnderlyingPrice("CCC") == 100 * 1e18
-
-    with reverts("Feed not added"):
-        pool.getUnderlyingPrice("BBB")
-
-    pool.registerFeed("ETH", "USD", ethusd)
-
-    assert pool.getUnderlyingPrice("AAA") == 0.1 * 1e18
-    assert pool.getUnderlyingPrice("BBB") == 20000 * 1e18
-    assert pool.getUnderlyingPrice("CCC") == 100 * 1e18
-    assert pool.getUnderlyingPrice("ETH") == 2000 * 1e18
-
-    cccusd.setPrice(120 * 1e8)
-    bbbeth.setPrice(11 * 1e18)
-    ethusd.setPrice(2200 * 1e8)
-
-    assert pool.getUnderlyingPrice("BBB") == 24200 * 1e18
-    assert pool.getUnderlyingPrice("CCC") == 120 * 1e18
-
-    cccusd.setPrice(0)
-    with reverts("Price should be > 0"):
-        pool.getUnderlyingPrice("CCC")
-
-    with reverts("Feed not added"):
-        pool.getUnderlyingPrice("DDD")
-    with reverts("Feed not added"):
-        pool.getUnderlyingPrice("USD")
 
 
 def test_add_lt(
@@ -143,6 +84,7 @@ def test_add_lt(
     with reverts("Price should be > 0"):
         pool.addLToken(btc, LONG)
 
+    # add bull token
     btcusd.setPrice(50000 * 1e8)
     tx = pool.addLToken(btc, LONG)
 
@@ -159,8 +101,9 @@ def test_add_lt(
         maxPoolShare,
         depositPaused,
         withdrawPaused,
-        initialSquarePrice,
-        lastNormPrice,
+        priceOffset,
+        lastPrice,
+        lastUpdated,
     ) = pool.params(btcbull)
     assert added
     assert token == btc
@@ -168,9 +111,19 @@ def test_add_lt(
     assert maxPoolShare == 0
     assert not depositPaused
     assert not withdrawPaused
-    assert initialSquarePrice == 50000 ** 2 * 1e36
-    assert lastNormPrice == 1e18
+    assert priceOffset == 50000 ** 2 * 1e36
+    assert lastPrice == 1e18
+    assert approx(lastUpdated, abs=1) == chain.time()
 
+    # check event
+    (ev,) = tx.events["AddLToken"]
+    assert ev["lToken"] == btcbull
+    assert ev["underlyingToken"] == btc
+    assert ev["side"] == LONG
+    assert ev["name"] == "Charm 2X Long Bitcoin"
+    assert ev["symbol"] == "charmBTCBULL"
+
+    # add bear token
     tx = pool.addLToken(btc, SHORT)
 
     btcbear = LToken.at(tx.return_value)
@@ -186,8 +139,9 @@ def test_add_lt(
         maxPoolShare,
         depositPaused,
         withdrawPaused,
-        initialSquarePrice,
-        lastNormPrice,
+        priceOffset,
+        lastPrice,
+        lastUpdated,
     ) = pool.params(btcbear)
     assert added
     assert token == btc
@@ -195,8 +149,17 @@ def test_add_lt(
     assert maxPoolShare == 0
     assert not depositPaused
     assert not withdrawPaused
-    assert initialSquarePrice == 50000 ** -2 * 1e36
-    assert lastNormPrice == 1e18
+    assert priceOffset == 50000 ** -2 * 1e36
+    assert lastPrice == 1e18
+    assert approx(lastUpdated, abs=1) == chain.time()
+
+    # check event
+    (ev,) = tx.events["AddLToken"]
+    assert ev["lToken"] == btcbear
+    assert ev["underlyingToken"] == btc
+    assert ev["side"] == SHORT
+    assert ev["name"] == "Charm 2X Short Bitcoin"
+    assert ev["symbol"] == "charmBTCBEAR"
 
     assert pool.numLTokens() == 2
     assert pool.lTokens(0) == btcbull
@@ -251,10 +214,10 @@ def test_buy_sell(
     assert pool.tradingFee() == 100
 
     sim = Sim()
-    sim.squarePrices[btcbull] = px1 ** 2
-    sim.squarePrices[btcbear] = px1 ** -2
-    sim.initialSquarePrices[btcbull] = px1 ** 2
-    sim.initialSquarePrices[btcbear] = px1 ** -2
+    sim.prices[btcbull] = px1 ** 2
+    sim.prices[btcbear] = px1 ** -2
+    sim.initialPrices[btcbull] = px1 ** 2
+    sim.initialPrices[btcbear] = px1 ** -2
 
     # check btc bull token price
     cost = sim.buy(btcbull, qty)
@@ -271,6 +234,22 @@ def test_buy_sell(
     assert approx(baseToken.balanceOf(pool)) == sim.balance
     assert approx(pool.poolBalance()) == sim.poolBalance
     assert approx(pool.totalValue()) == sim.totalValue()
+    assert approx(pool.params(btcbull)[7]) == 1e18
+    assert approx(pool.params(btcbull)[8], abs=1) == chain.time()
+
+    # check events
+    (ev,) = tx.events["Trade"]
+    assert ev["sender"] == bob
+    assert ev["to"] == alice
+    assert ev["baseToken"] == baseToken
+    assert ev["lToken"] == btcbull
+    assert ev["isBuy"]
+    assert approx(ev["quantity"]) == qty * 1e18
+    assert approx(ev["cost"]) == cost
+    assert approx(ev["feeAmount"]) == cost / 101
+    (ev,) = tx.events["UpdatePrice"]
+    assert ev["lToken"] == btcbull
+    assert approx(ev["price"]) == sim.prices[btcbull] / sim.initialPrices[btcbull] * 1e18
 
     # check btc bear token price
     cost = sim.buy(btcbear, qty)
@@ -287,6 +266,22 @@ def test_buy_sell(
     assert approx(baseToken.balanceOf(pool)) == sim.balance
     assert approx(pool.poolBalance()) == sim.poolBalance
     assert approx(pool.totalValue()) == sim.totalValue()
+    assert approx(pool.params(btcbear)[7]) == 1e18
+    assert approx(pool.params(btcbear)[8], abs=1) == chain.time()
+
+    # check events
+    (ev,) = tx.events["Trade"]
+    assert ev["sender"] == bob
+    assert ev["to"] == alice
+    assert ev["baseToken"] == baseToken
+    assert ev["lToken"] == btcbear
+    assert ev["isBuy"]
+    assert approx(ev["quantity"]) == qty * 1e18
+    assert approx(ev["cost"]) == cost
+    assert approx(ev["feeAmount"]) == cost / 101
+    (ev,) = tx.events["UpdatePrice"]
+    assert ev["lToken"] == btcbear
+    assert approx(ev["price"]) == sim.prices[btcbear] / sim.initialPrices[btcbear] * 1e18
 
     # change oracle price
     btcusd.setPrice(px2 * 1e8)
@@ -297,14 +292,14 @@ def test_buy_sell(
 
     # update btc bull price
     pool.updatePrice(btcbull)
-    sim.squarePrices[btcbull] = px2 ** 2
+    sim.prices[btcbull] = px2 ** 2
     assert approx(baseToken.balanceOf(pool)) == sim.balance
     assert approx(pool.poolBalance()) == sim.poolBalance
     assert approx(pool.totalValue()) == sim.totalValue()
 
     # update btc bear price
     pool.updatePrice(btcbear)
-    sim.squarePrices[btcbear] = px2 ** -2
+    sim.prices[btcbear] = px2 ** -2
     assert approx(baseToken.balanceOf(pool)) == sim.balance
     assert approx(pool.poolBalance()) == sim.poolBalance
     assert approx(pool.totalValue()) == sim.totalValue()
@@ -325,6 +320,22 @@ def test_buy_sell(
     assert approx(baseToken.balanceOf(pool)) == sim.balance
     assert approx(pool.poolBalance()) == sim.poolBalance
     assert approx(pool.totalValue()) == sim.totalValue()
+    assert approx(pool.params(btcbull)[7]) == sim.prices[btcbull] / sim.initialPrices[btcbull] * 1e18
+    assert approx(pool.params(btcbull)[8], abs=1) == chain.time()
+
+    # check events
+    (ev,) = tx.events["Trade"]
+    assert ev["sender"] == alice
+    assert ev["to"] == bob
+    assert ev["baseToken"] == baseToken
+    assert ev["lToken"] == btcbull
+    assert not ev["isBuy"]
+    assert approx(ev["quantity"]) == quantity
+    assert approx(ev["cost"]) == cost
+    assert approx(ev["feeAmount"]) == cost / 99
+    (ev,) = tx.events["UpdatePrice"]
+    assert ev["lToken"] == btcbull
+    assert approx(ev["price"]) == sim.prices[btcbull] / sim.initialPrices[btcbull] * 1e18
 
     # check btc bear token price
     quantity = btcbear.balanceOf(alice)
@@ -342,10 +353,22 @@ def test_buy_sell(
     assert approx(baseToken.balanceOf(pool)) == sim.balance
     assert approx(pool.poolBalance()) == 0
     assert approx(pool.totalValue()) == 0
-    assert approx(btcbear.balanceOf(alice)) == 0
-    assert approx(baseToken.balanceOf(pool)) == sim.balance
-    assert approx(pool.poolBalance()) == 0
-    assert approx(pool.totalValue()) == 0
+    assert approx(pool.params(btcbear)[7]) == sim.prices[btcbear] / sim.initialPrices[btcbear] * 1e18
+    assert approx(pool.params(btcbear)[8], abs=1) == chain.time()
+
+    # check events
+    (ev,) = tx.events["Trade"]
+    assert ev["sender"] == alice
+    assert ev["to"] == bob
+    assert ev["baseToken"] == baseToken
+    assert ev["lToken"] == btcbear
+    assert not ev["isBuy"]
+    assert approx(ev["quantity"]) == quantity
+    assert approx(ev["cost"]) == cost
+    assert approx(ev["feeAmount"]) == cost / 99
+    (ev,) = tx.events["UpdatePrice"]
+    assert ev["lToken"] == btcbear
+    assert approx(ev["price"]) == sim.prices[btcbear] / sim.initialPrices[btcbear] * 1e18
 
     # buying 0 does nothing. it costs 1 because of rounding up
     assert pool.buy(btcbull, 0, alice, {"from": bob}).return_value == 1
