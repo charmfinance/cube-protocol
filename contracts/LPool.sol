@@ -91,11 +91,14 @@ contract LPool is Ownable, ReentrancyGuard {
      * @notice Buy leveraged tokens
      * @param lToken The leveraged token to buy
      * @param quantity The quantity of leveraged tokens to buy
+     * @param maxCost Revert if more than this amount is paid
      * @param to The address that receives the leveraged tokens
+     * @return cost The amount of base tokens paid
      */
     function buy(
         LToken lToken,
         uint256 quantity,
+        uint256 maxCost,
         address to
     ) external nonReentrant returns (uint256 cost) {
         Params storage _params = params[lToken];
@@ -108,6 +111,7 @@ contract LPool is Ownable, ReentrancyGuard {
         uint256 feeAmount = fee(cost);
         feesAccrued = feesAccrued.add(feeAmount);
         cost = cost.add(feeAmount);
+        require(cost <= maxCost, "Max slippage exceeded");
 
         totalValue = totalValue.add(quantity.mul(price));
         baseToken.transferFrom(msg.sender, address(this), cost);
@@ -133,11 +137,14 @@ contract LPool is Ownable, ReentrancyGuard {
      * @notice Sell leveraged tokens
      * @param lToken The leveraged token to sell
      * @param quantity The quantity of leveraged tokens to sell
+     * @param minCost Revert if less than this amount is returned
      * @param to The address that receives the sale amount
+     * @return cost The amount of base tokens returned
      */
     function sell(
         LToken lToken,
         uint256 quantity,
+        uint256 minCost,
         address to
     ) external nonReentrant returns (uint256 cost) {
         Params storage _params = params[lToken];
@@ -150,6 +157,7 @@ contract LPool is Ownable, ReentrancyGuard {
         uint256 feeAmount = fee(cost);
         feesAccrued = feesAccrued.add(feeAmount);
         cost = cost.sub(feeAmount);
+        require(cost >= minCost, "Max slippage exceeded");
 
         totalValue = totalValue.sub(quantity.mul(price));
         lToken.burn(msg.sender, quantity);
@@ -297,6 +305,14 @@ contract LPool is Ownable, ReentrancyGuard {
     function updateSellPaused(LToken lToken, bool paused) external onlyOwner {
         require(params[lToken].added, "Not added");
         params[lToken].sellPaused = paused;
+    }
+
+    function pauseAll() external onlyOwner {
+        for (uint256 i = 0; i < lTokens.length; i = i.add(1)) {
+            LToken lToken = lTokens[i];
+            params[lToken].buyPaused = true;
+            params[lToken].sellPaused = true;
+        }
     }
 
     function updateMaxPoolShare(LToken lToken, uint256 maxPoolShare) external onlyOwner {

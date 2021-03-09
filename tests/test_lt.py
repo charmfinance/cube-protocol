@@ -208,7 +208,7 @@ def test_buy_sell(
     btcbear = LToken.at(tx.return_value)
 
     with reverts("Not added"):
-        pool.buy(ZERO_ADDRESS, 1, alice, {"from": bob})
+        pool.buy(ZERO_ADDRESS, 1, 1, alice, {"from": bob})
 
     assert feedsRegistry.getPrice(btc) == px1 * 1e8
 
@@ -224,10 +224,13 @@ def test_buy_sell(
     cost = sim.buy(btcbull, qty)
     assert approx(pool.buyQuote(btcbull, qty * 1e18)) == cost
 
+    with reverts("Max slippage exceeded"):
+        pool.buy(btcbull, qty * 1e18, cost * 0.99, alice, {"from": bob})
+
     # buy 1 btc bull token
     bobBalance = usdc.balanceOf(bob)
     poolBalance = usdc.balanceOf(pool)
-    tx = pool.buy(btcbull, qty * 1e18, alice, {"from": bob})
+    tx = pool.buy(btcbull, qty * 1e18, cost * 1.01, alice, {"from": bob})
     assert approx(tx.return_value) == cost
     assert approx(bobBalance - usdc.balanceOf(bob)) == cost
     assert approx(usdc.balanceOf(pool) - poolBalance) == cost
@@ -258,10 +261,13 @@ def test_buy_sell(
     cost = sim.buy(btcbear, qty)
     assert approx(pool.buyQuote(btcbear, qty * 1e18)) == cost
 
+    with reverts("Max slippage exceeded"):
+        pool.buy(btcbear, qty * 1e18, cost * 0.99, alice, {"from": bob})
+
     # buy 1 btc bear token
     bobBalance = usdc.balanceOf(bob)
     poolBalance = usdc.balanceOf(pool)
-    tx = pool.buy(btcbear, qty * 1e18, alice, {"from": bob})
+    tx = pool.buy(btcbear, qty * 1e18, cost * 1.01, alice, {"from": bob})
     assert approx(tx.return_value) == cost
     assert approx(bobBalance - usdc.balanceOf(bob)) == cost
     assert approx(usdc.balanceOf(pool) - poolBalance) == cost
@@ -314,10 +320,13 @@ def test_buy_sell(
     cost = sim.sell(btcbull, quantity / 1e18)
     assert approx(pool.sellQuote(btcbull, quantity)) == cost
 
+    with reverts("Max slippage exceeded"):
+        pool.buy(btcbull, quantity, cost * 1.01, alice, {"from": bob})
+
     # sell 1 btc bull token
     bobBalance = usdc.balanceOf(bob)
     poolBalance = usdc.balanceOf(pool)
-    tx = pool.sell(btcbull, quantity, bob, {"from": alice})
+    tx = pool.sell(btcbull, quantity, cost * 0.99, bob, {"from": alice})
     assert approx(tx.return_value) == cost
     assert approx(usdc.balanceOf(bob) - bobBalance) == cost
     assert approx(poolBalance - usdc.balanceOf(pool)) == cost
@@ -352,10 +361,13 @@ def test_buy_sell(
     cost = sim.sell(btcbear, quantity / 1e18)
     assert approx(pool.sellQuote(btcbear, quantity)) == cost
 
+    with reverts("Max slippage exceeded"):
+        pool.buy(btcbear, quantity, cost * 1.01, alice, {"from": bob})
+
     # sell 1 btc bear token
     bobBalance = usdc.balanceOf(bob)
     poolBalance = usdc.balanceOf(pool)
-    tx = pool.sell(btcbear, quantity, bob, {"from": alice})
+    tx = pool.sell(btcbear, quantity, cost * 0.99, bob, {"from": alice})
     assert approx(tx.return_value) == cost
     assert approx(usdc.balanceOf(bob) - bobBalance) == cost
     assert approx(poolBalance - usdc.balanceOf(pool)) == cost
@@ -386,10 +398,10 @@ def test_buy_sell(
     )
 
     # buying 0 does nothing. it costs 1 because of rounding up
-    assert pool.buy(btcbull, 0, alice, {"from": bob}).return_value == 1
+    assert pool.buy(btcbull, 0, 1, alice, {"from": bob}).return_value == 1
 
     # selling 0 does nothing
-    assert pool.sell(btcbull, 0, bob, {"from": alice}).return_value == 0
+    assert pool.sell(btcbull, 0, 0, bob, {"from": alice}).return_value == 0
 
 
 def test_owner_methods(
@@ -449,14 +461,14 @@ def test_owner_methods(
     assert pool.maxTvl() == 2e18
 
     with reverts("Max TVL exceeded"):
-        pool.buy(btcbull, 2e18, alice, {"from": alice})
+        pool.buy(btcbull, 2e18, 1e36, alice, {"from": alice})
 
-    pool.buy(btcbull, 1e18, alice, {"from": alice})
+    pool.buy(btcbull, 1e18, 1e36, alice, {"from": alice})
 
     pool.updateMaxTvl(0)
     assert pool.maxTvl() == 0
 
-    pool.buy(btcbull, 1e18, alice, {"from": alice})
+    pool.buy(btcbull, 1e18, 1e36, alice, {"from": alice})
 
     # update max pool share
     pool.updateMaxPoolShare(btcbear, 5000)  # 50%
@@ -464,14 +476,14 @@ def test_owner_methods(
     assert pool.params(btcbear)[3] == 5000
 
     with reverts("Max pool share exceeded"):
-        pool.buy(btcbear, 2.1e18, alice, {"from": alice})
+        pool.buy(btcbear, 2.1e18, 1e36, alice, {"from": alice})
 
-    pool.buy(btcbear, 2e18, alice, {"from": alice})
+    pool.buy(btcbear, 2e18, 1e36, alice, {"from": alice})
 
     pool.updateMaxPoolShare(btcbear, 0)
     assert pool.params(btcbear)[3] == 0
 
-    pool.buy(btcbear, 1e18, alice, {"from": alice})
+    pool.buy(btcbear, 1e18, 1e36, alice, {"from": alice})
 
     # collect fee
     assert pool.feesAccrued() == 5e16
@@ -491,18 +503,18 @@ def test_owner_methods(
     pool.updateBuyPaused(btcbull, True)
 
     with reverts("Paused"):
-        pool.buy(btcbull, 1e18, alice, {"from": alice})
-    pool.buy(btcbear, 1e18, alice, {"from": alice})
+        pool.buy(btcbull, 1e18, 1e36, alice, {"from": alice})
+    pool.buy(btcbear, 1e18, 1e36, alice, {"from": alice})
 
     pool.updateBuyPaused(btcbull, False)
-    pool.buy(btcbull, 1e18, alice, {"from": alice})
+    pool.buy(btcbull, 1e18, 1e36, alice, {"from": alice})
 
     # pause sell
     pool.updateSellPaused(btcbull, True)
 
     with reverts("Paused"):
-        pool.sell(btcbull, 1e18, alice, {"from": alice})
-    pool.sell(btcbear, 1e18, alice, {"from": alice})
+        pool.sell(btcbull, 1e18, 0, alice, {"from": alice})
+    pool.sell(btcbear, 1e18, 0, alice, {"from": alice})
 
     pool.updateSellPaused(btcbull, False)
-    pool.sell(btcbull, 1e18, alice, {"from": alice})
+    pool.sell(btcbull, 1e18, 0, alice, {"from": alice})
