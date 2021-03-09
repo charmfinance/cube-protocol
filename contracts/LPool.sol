@@ -83,7 +83,7 @@ contract LPool is Ownable, ReentrancyGuard {
         feedRegistry = ChainlinkFeedsRegistry(_feedRegistry);
         lTokenImpl = new LToken();
 
-        // initialize with dummy data so that no one else can
+        // initialize with dummy data so that it can't be initialized again
         lTokenImpl.initialize(address(0), "", "");
     }
 
@@ -171,7 +171,8 @@ contract LPool is Ownable, ReentrancyGuard {
      * automatically called when this leveraged token is bought or sold. However
      * if it has not been traded for a while, it should be called periodically
      * so that the total value does get too far out of sync
-     * @param lToken The leveraged token whose price is updated
+     * @param lToken Leveraged token whose price is updated
+     * @return price Updated unnormalized leveraged token price
      */
     function updatePrice(LToken lToken) public returns (uint256 price) {
         Params storage _params = params[lToken];
@@ -206,6 +207,7 @@ contract LPool is Ownable, ReentrancyGuard {
      * @notice Add a new leveraged token. Can only be called by owner
      * @param underlyingToken The ERC-20 whose price is used
      * @param side Long or short
+     * @return address Address of leveraged token that was added
      */
     function addLToken(address underlyingToken, Side side) external onlyOwner returns (address) {
         require(side == Side.Short || side == Side.Long, "Invalid side");
@@ -245,7 +247,7 @@ contract LPool is Ownable, ReentrancyGuard {
     /**
      * @notice Amount received by selling leveraged tokens
      * @param lToken The leveraged token sold
-     * @param quantity The quantity of leveraged tokens sold
+     * @param quantity Quantity of leveraged tokens sold
      */
     function quote(LToken lToken, uint256 quantity) public view returns (uint256 cost) {
         Params storage _params = params[lToken];
@@ -255,44 +257,15 @@ contract LPool is Ownable, ReentrancyGuard {
         return _totalValue > 0 ? quantity.mul(_params.lastPrice).mul(poolBalance()).div(_totalValue) : quantity;
     }
 
-    /**
-     * @notice Fee paid to buy or sell leveraged tokens
-     * @param cost Amount of `baseToken` paid or received when buying or selling
-     */
     function fee(uint256 cost) public view returns (uint256) {
         return cost.mul(tradingFee).div(1e4);
     }
 
-    /**
-     * @notice Cost to buy leveraged tokens
-     * @param lToken Leveraged token bought
-     * @param quantity Quantity of leveraged tokens bought
-     */
-    function buyQuote(LToken lToken, uint256 quantity) public view returns (uint256) {
-        uint256 cost = quote(lToken, quantity).add(1);
-        return cost.add(fee(cost));
-    }
-
-    /**
-     * @notice Amount received by selling leveraged tokens
-     * @param lToken Leveraged token sold
-     * @param quantity Quantity of leveraged tokens sold
-     */
-    function sellQuote(LToken lToken, uint256 quantity) public view returns (uint256) {
-        uint256 cost = quote(lToken, quantity);
-        return cost.sub(fee(cost));
-    }
-
-    /**
-     * @notice Balance of the pool owned by leveraged token holders
-     */
     function poolBalance() public view returns (uint256) {
+        // subtract fees so that we only count the balance backing the leveraged tokens
         return baseToken.balanceOf(address(this)).sub(feesAccrued);
     }
 
-    /**
-     * @notice Number of leveraged tokens in the pool
-     */
     function numLTokens() external view returns (uint256) {
         return lTokens.length;
     }
