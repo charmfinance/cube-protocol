@@ -10,6 +10,26 @@ import "./LPool.sol";
 contract LHelpers {
     using SafeMath for uint256;
 
+    /**
+     * @notice Cost to buy leveraged tokens
+     * @param lToken Leveraged token bought
+     * @param quantity Quantity of leveraged tokens bought
+     */
+    function buyQuote(LToken lToken, uint256 quantity) public view returns (uint256) {
+        uint256 cost = quote(lToken, quantity).add(1);
+        return cost.add(fee(cost));
+    }
+
+    /**
+     * @notice Amount received by selling leveraged tokens
+     * @param lToken Leveraged token sold
+     * @param quantity Quantity of leveraged tokens sold
+     */
+    function sellQuote(LToken lToken, uint256 quantity) public view returns (uint256) {
+        uint256 cost = quote(lToken, quantity);
+        return cost.sub(fee(cost));
+    }
+
     function allPrices(LPool pool) external view returns (uint256[] memory prices) {
         uint256 n = pool.numLTokens();
         prices = new uint256[](n);

@@ -222,7 +222,6 @@ def test_buy_sell(
 
     # check btc bull token price
     cost = sim.buy(btcbull, qty)
-    assert approx(pool.buyQuote(btcbull, qty * 1e18)) == cost
 
     with reverts("Max slippage exceeded"):
         pool.buy(btcbull, qty * 1e18, cost * 0.99, alice, {"from": bob})
@@ -259,7 +258,6 @@ def test_buy_sell(
 
     # check btc bear token price
     cost = sim.buy(btcbear, qty)
-    assert approx(pool.buyQuote(btcbear, qty * 1e18)) == cost
 
     with reverts("Max slippage exceeded"):
         pool.buy(btcbear, qty * 1e18, cost * 0.99, alice, {"from": bob})
@@ -318,7 +316,6 @@ def test_buy_sell(
     # check btc bull token price
     quantity = btcbull.balanceOf(alice)
     cost = sim.sell(btcbull, quantity / 1e18)
-    assert approx(pool.sellQuote(btcbull, quantity)) == cost
 
     with reverts("Max slippage exceeded"):
         pool.buy(btcbull, quantity, cost * 1.01, alice, {"from": bob})
@@ -359,7 +356,6 @@ def test_buy_sell(
     # check btc bear token price
     quantity = btcbear.balanceOf(alice)
     cost = sim.sell(btcbear, quantity / 1e18)
-    assert approx(pool.sellQuote(btcbear, quantity)) == cost
 
     with reverts("Max slippage exceeded"):
         pool.buy(btcbear, quantity, cost * 1.01, alice, {"from": bob})
