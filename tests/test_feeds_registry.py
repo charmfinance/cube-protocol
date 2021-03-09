@@ -1,7 +1,9 @@
 from brownie import reverts, ZERO_ADDRESS
 
 
-def test_feeds_registry(a, ChainlinkFeedsRegistry, MockAggregatorV3Interface, MockToken):
+def test_feeds_registry(
+    a, ChainlinkFeedsRegistry, MockAggregatorV3Interface, MockToken
+):
     deployer, alice = a[:2]
 
     aaa = deployer.deploy(MockToken, "AAA", "AAA", 18)
