@@ -8,8 +8,8 @@ def test_feeds_registry(a, ChainlinkFeedsRegistry, MockAggregatorV3Interface, Mo
     bbb = deployer.deploy(MockToken, "BBB", "BBB", 18)
     ccc = deployer.deploy(MockToken, "CCC", "CCC", 18)
     ddd = deployer.deploy(MockToken, "DDD", "DDD", 18)
-    eth = deployer.deploy(MockToken, "Ether", "ETH", 18)
-    usd = deployer.deploy(MockToken, "USD Coin", "USDC", 6)
+    weth = deployer.deploy(MockToken, "Wrapped Ether", "ETH", 18)
+    usdc = deployer.deploy(MockToken, "USD Coin", "USDC", 6)
 
     aaausd = deployer.deploy(MockAggregatorV3Interface)
     aaaeth = deployer.deploy(MockAggregatorV3Interface)
@@ -17,7 +17,7 @@ def test_feeds_registry(a, ChainlinkFeedsRegistry, MockAggregatorV3Interface, Mo
     cccusd = deployer.deploy(MockAggregatorV3Interface)
     ethusd = deployer.deploy(MockAggregatorV3Interface)
 
-    feeds = deployer.deploy(ChainlinkFeedsRegistry, eth)
+    feeds = deployer.deploy(ChainlinkFeedsRegistry, weth)
 
     with reverts("Ownable: caller is not the owner"):
         feeds.addUsdFeed(aaa, aaausd, {"from": alice})
@@ -43,14 +43,14 @@ def test_feeds_registry(a, ChainlinkFeedsRegistry, MockAggregatorV3Interface, Mo
     assert feeds.getPrice(aaa) == 0.1 * 1e8
     assert feeds.getPrice(bbb) == 0
     assert feeds.getPrice(ccc) == 100 * 1e8
-    assert feeds.getPrice(eth) == 0
+    assert feeds.getPrice(weth) == 0
 
-    feeds.addUsdFeed(eth, ethusd)
+    feeds.addUsdFeed(weth, ethusd)
 
     assert feeds.getPrice(aaa) == 0.1 * 1e8
     assert feeds.getPrice(bbb) == 20000 * 1e8
     assert feeds.getPrice(ccc) == 100 * 1e8
-    assert feeds.getPrice(eth) == 2000 * 1e8
+    assert feeds.getPrice(weth) == 2000 * 1e8
 
     cccusd.setPrice(120 * 1e8)
     bbbeth.setPrice(11 * 1e18)
@@ -63,4 +63,4 @@ def test_feeds_registry(a, ChainlinkFeedsRegistry, MockAggregatorV3Interface, Mo
     assert feeds.getPrice(ccc) == 0
 
     assert feeds.getPrice(ddd) == 0
-    assert feeds.getPrice(usd) == 0
+    assert feeds.getPrice(usdc) == 0

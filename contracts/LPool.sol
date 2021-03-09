@@ -174,7 +174,7 @@ contract LPool is Ownable, ReentrancyGuard {
 
         // invert price for short tokens and convert to 36dp
         uint256 squareOrInv = _params.side == Side.Long ? square.mul(1e20) : uint256(1e52).div(square);
-        require(squareOrInv > 0, "Price must be > 0");
+        require(squareOrInv > 0, "Price should be > 0");
 
         // set priceOffset the first time this method is called for this leveraged token
         uint256 priceOffset = _params.priceOffset;
@@ -289,22 +289,14 @@ contract LPool is Ownable, ReentrancyGuard {
         return lTokens.length;
     }
 
-    function setBuyPaused(LToken lToken, bool paused) external onlyOwner {
+    function updateBuyPaused(LToken lToken, bool paused) external onlyOwner {
         require(params[lToken].added, "Not added");
         params[lToken].buyPaused = paused;
     }
 
-    function setSellPaused(LToken lToken, bool paused) external onlyOwner {
+    function updateSellPaused(LToken lToken, bool paused) external onlyOwner {
         require(params[lToken].added, "Not added");
         params[lToken].sellPaused = paused;
-    }
-
-    function pauseAll() external onlyOwner {
-        for (uint256 i = 0; i < lTokens.length; i = i.add(1)) {
-            LToken lToken = lTokens[i];
-            params[lToken].buyPaused = true;
-            params[lToken].sellPaused = true;
-        }
     }
 
     function updateMaxPoolShare(LToken lToken, uint256 maxPoolShare) external onlyOwner {

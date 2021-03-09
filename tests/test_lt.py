@@ -64,15 +64,17 @@ def test_add_lt(
     deployer, alice = a[:2]
 
     # deploy pool
-    baseToken = deployer.deploy(MockToken, "USD Coin", "USDC", 6)
-    feedsRegistry = deployer.deploy(ChainlinkFeedsRegistry)
-    pool = deployer.deploy(LPool, baseToken, feedsRegistry)
+    usdc = deployer.deploy(MockToken, "USD Coin", "USDC", 6)
     btc = deployer.deploy(MockToken, "Bitcoin", "BTC", 8)
+    weth = deployer.deploy(MockToken, "Wrapped Ether", "ETH", 18)
+
+    feedsRegistry = deployer.deploy(ChainlinkFeedsRegistry, weth)
+    pool = deployer.deploy(LPool, usdc, feedsRegistry)
 
     with reverts("Ownable: caller is not the owner"):
         pool.addLToken(btc, LONG, {"from": alice})
 
-    with reverts("Price must be > 0"):
+    with reverts("Price should be > 0"):
         pool.addLToken(btc, LONG)
 
     btcusd = deployer.deploy(MockAggregatorV3Interface)
@@ -185,15 +187,17 @@ def test_buy_sell(
     deployer, alice, bob = a[:3]
 
     # deploy pool
-    baseToken = deployer.deploy(MockToken, "USD Coin", "USDC", 6)
-    feedsRegistry = deployer.deploy(ChainlinkFeedsRegistry)
-    pool = deployer.deploy(LPool, baseToken, feedsRegistry)
+    usdc = deployer.deploy(MockToken, "USD Coin", "USDC", 6)
     btc = deployer.deploy(MockToken, "Bitcoin", "BTC", 8)
+    weth = deployer.deploy(MockToken, "Wrapped Ether", "ETH", 18)
 
-    baseToken.mint(alice, 1e36)
-    baseToken.mint(bob, 1e36)
-    baseToken.approve(pool, 1e36, {"from": alice})
-    baseToken.approve(pool, 1e36, {"from": bob})
+    feedsRegistry = deployer.deploy(ChainlinkFeedsRegistry, weth)
+    pool = deployer.deploy(LPool, usdc, feedsRegistry)
+
+    usdc.mint(alice, 1e36)
+    usdc.mint(bob, 1e36)
+    usdc.approve(pool, 1e36, {"from": alice})
+    usdc.approve(pool, 1e36, {"from": bob})
 
     btcusd = deployer.deploy(MockAggregatorV3Interface)
     btcusd.setPrice(px1 * 1e8)
@@ -210,8 +214,7 @@ def test_buy_sell(
 
     assert feedsRegistry.getPrice(btc) == px1 * 1e8
 
-    pool.updateTradingFee(100)
-    assert pool.tradingFee() == 100
+    pool.updateTradingFee(100)  # 1%
 
     sim = Sim()
     sim.prices[btcbull] = px1 ** 2
@@ -224,14 +227,14 @@ def test_buy_sell(
     assert approx(pool.buyQuote(btcbull, qty * 1e18)) == cost
 
     # buy 1 btc bull token
-    bobBalance = baseToken.balanceOf(bob)
-    poolBalance = baseToken.balanceOf(pool)
+    bobBalance = usdc.balanceOf(bob)
+    poolBalance = usdc.balanceOf(pool)
     tx = pool.buy(btcbull, qty * 1e18, alice, {"from": bob})
     assert approx(tx.return_value) == cost
-    assert approx(bobBalance - baseToken.balanceOf(bob)) == cost
-    assert approx(baseToken.balanceOf(pool) - poolBalance) == cost
+    assert approx(bobBalance - usdc.balanceOf(bob)) == cost
+    assert approx(usdc.balanceOf(pool) - poolBalance) == cost
     assert approx(btcbull.balanceOf(alice)) == qty * 1e18
-    assert approx(baseToken.balanceOf(pool)) == sim.balance
+    assert approx(usdc.balanceOf(pool)) == sim.balance
     assert approx(pool.poolBalance()) == sim.poolBalance
     assert approx(pool.totalValue()) == sim.totalValue()
     assert approx(pool.params(btcbull)[7]) == 1e18
@@ -241,7 +244,7 @@ def test_buy_sell(
     (ev,) = tx.events["Trade"]
     assert ev["sender"] == bob
     assert ev["to"] == alice
-    assert ev["baseToken"] == baseToken
+    assert ev["baseToken"] == usdc
     assert ev["lToken"] == btcbull
     assert ev["isBuy"]
     assert approx(ev["quantity"]) == qty * 1e18
@@ -256,14 +259,14 @@ def test_buy_sell(
     assert approx(pool.buyQuote(btcbear, qty * 1e18)) == cost
 
     # buy 1 btc bear token
-    bobBalance = baseToken.balanceOf(bob)
-    poolBalance = baseToken.balanceOf(pool)
+    bobBalance = usdc.balanceOf(bob)
+    poolBalance = usdc.balanceOf(pool)
     tx = pool.buy(btcbear, qty * 1e18, alice, {"from": bob})
     assert approx(tx.return_value) == cost
-    assert approx(bobBalance - baseToken.balanceOf(bob)) == cost
-    assert approx(baseToken.balanceOf(pool) - poolBalance) == cost
+    assert approx(bobBalance - usdc.balanceOf(bob)) == cost
+    assert approx(usdc.balanceOf(pool) - poolBalance) == cost
     assert approx(btcbear.balanceOf(alice)) == qty * 1e18
-    assert approx(baseToken.balanceOf(pool)) == sim.balance
+    assert approx(usdc.balanceOf(pool)) == sim.balance
     assert approx(pool.poolBalance()) == sim.poolBalance
     assert approx(pool.totalValue()) == sim.totalValue()
     assert approx(pool.params(btcbear)[7]) == 1e18
@@ -273,7 +276,7 @@ def test_buy_sell(
     (ev,) = tx.events["Trade"]
     assert ev["sender"] == bob
     assert ev["to"] == alice
-    assert ev["baseToken"] == baseToken
+    assert ev["baseToken"] == usdc
     assert ev["lToken"] == btcbear
     assert ev["isBuy"]
     assert approx(ev["quantity"]) == qty * 1e18
@@ -286,21 +289,21 @@ def test_buy_sell(
     # change oracle price
     btcusd.setPrice(px2 * 1e8)
     assert feedsRegistry.getPrice(btc) == px2 * 1e8
-    assert approx(baseToken.balanceOf(pool)) == sim.balance
+    assert approx(usdc.balanceOf(pool)) == sim.balance
     assert approx(pool.poolBalance()) == sim.poolBalance
     assert approx(pool.totalValue()) == sim.totalValue()
 
     # update btc bull price
     pool.updatePrice(btcbull)
     sim.prices[btcbull] = px2 ** 2
-    assert approx(baseToken.balanceOf(pool)) == sim.balance
+    assert approx(usdc.balanceOf(pool)) == sim.balance
     assert approx(pool.poolBalance()) == sim.poolBalance
     assert approx(pool.totalValue()) == sim.totalValue()
 
     # update btc bear price
     pool.updatePrice(btcbear)
     sim.prices[btcbear] = px2 ** -2
-    assert approx(baseToken.balanceOf(pool)) == sim.balance
+    assert approx(usdc.balanceOf(pool)) == sim.balance
     assert approx(pool.poolBalance()) == sim.poolBalance
     assert approx(pool.totalValue()) == sim.totalValue()
 
@@ -310,14 +313,14 @@ def test_buy_sell(
     assert approx(pool.sellQuote(btcbull, quantity)) == cost
 
     # sell 1 btc bull token
-    bobBalance = baseToken.balanceOf(bob)
-    poolBalance = baseToken.balanceOf(pool)
+    bobBalance = usdc.balanceOf(bob)
+    poolBalance = usdc.balanceOf(pool)
     tx = pool.sell(btcbull, quantity, bob, {"from": alice})
     assert approx(tx.return_value) == cost
-    assert approx(baseToken.balanceOf(bob) - bobBalance) == cost
-    assert approx(poolBalance - baseToken.balanceOf(pool)) == cost
+    assert approx(usdc.balanceOf(bob) - bobBalance) == cost
+    assert approx(poolBalance - usdc.balanceOf(pool)) == cost
     assert approx(btcbull.balanceOf(alice)) == 0
-    assert approx(baseToken.balanceOf(pool)) == sim.balance
+    assert approx(usdc.balanceOf(pool)) == sim.balance
     assert approx(pool.poolBalance()) == sim.poolBalance
     assert approx(pool.totalValue()) == sim.totalValue()
     assert approx(pool.params(btcbull)[7]) == sim.prices[btcbull] / sim.initialPrices[btcbull] * 1e18
@@ -327,7 +330,7 @@ def test_buy_sell(
     (ev,) = tx.events["Trade"]
     assert ev["sender"] == alice
     assert ev["to"] == bob
-    assert ev["baseToken"] == baseToken
+    assert ev["baseToken"] == usdc
     assert ev["lToken"] == btcbull
     assert not ev["isBuy"]
     assert approx(ev["quantity"]) == quantity
@@ -343,14 +346,14 @@ def test_buy_sell(
     assert approx(pool.sellQuote(btcbear, quantity)) == cost
 
     # sell 1 btc bear token
-    bobBalance = baseToken.balanceOf(bob)
-    poolBalance = baseToken.balanceOf(pool)
+    bobBalance = usdc.balanceOf(bob)
+    poolBalance = usdc.balanceOf(pool)
     tx = pool.sell(btcbear, quantity, bob, {"from": alice})
     assert approx(tx.return_value) == cost
-    assert approx(baseToken.balanceOf(bob) - bobBalance) == cost
-    assert approx(poolBalance - baseToken.balanceOf(pool)) == cost
+    assert approx(usdc.balanceOf(bob) - bobBalance) == cost
+    assert approx(poolBalance - usdc.balanceOf(pool)) == cost
     assert approx(btcbear.balanceOf(alice)) == 0
-    assert approx(baseToken.balanceOf(pool)) == sim.balance
+    assert approx(usdc.balanceOf(pool)) == sim.balance
     assert approx(pool.poolBalance()) == 0
     assert approx(pool.totalValue()) == 0
     assert approx(pool.params(btcbear)[7]) == sim.prices[btcbear] / sim.initialPrices[btcbear] * 1e18
@@ -360,7 +363,7 @@ def test_buy_sell(
     (ev,) = tx.events["Trade"]
     assert ev["sender"] == alice
     assert ev["to"] == bob
-    assert ev["baseToken"] == baseToken
+    assert ev["baseToken"] == usdc
     assert ev["lToken"] == btcbear
     assert not ev["isBuy"]
     assert approx(ev["quantity"]) == quantity
@@ -375,3 +378,120 @@ def test_buy_sell(
 
     # selling 0 does nothing
     assert pool.sell(btcbull, 0, bob, {"from": alice}).return_value == 0
+
+
+def test_owner_methods(
+    a,
+    LPool,
+    LToken,
+    ChainlinkFeedsRegistry,
+    MockToken,
+    MockAggregatorV3Interface,
+):
+    deployer, alice, bob = a[:3]
+
+    # deploy pool
+    usdc = deployer.deploy(MockToken, "USD Coin", "USDC", 6)
+    btc = deployer.deploy(MockToken, "Bitcoin", "BTC", 8)
+    weth = deployer.deploy(MockToken, "Wrapped Ether", "ETH", 18)
+
+    feedsRegistry = deployer.deploy(ChainlinkFeedsRegistry, weth)
+    pool = deployer.deploy(LPool, usdc, feedsRegistry)
+
+    usdc.mint(alice, 1e36)
+    usdc.mint(bob, 1e36)
+    usdc.approve(pool, 1e36, {"from": alice})
+    usdc.approve(pool, 1e36, {"from": bob})
+
+    btcusd = deployer.deploy(MockAggregatorV3Interface)
+    btcusd.setPrice(50000 * 1e8)
+    feedsRegistry.addUsdFeed(btc, btcusd)
+
+    tx = pool.addLToken(btc, LONG)
+    btcbull = LToken.at(tx.return_value)
+
+    tx = pool.addLToken(btc, SHORT)
+    btcbear = LToken.at(tx.return_value)
+
+    # update trading fee
+    with reverts("Ownable: caller is not the owner"):
+        pool.updateTradingFee(100, {"from": alice})
+
+    pool.updateTradingFee(100)  # 1%
+    assert pool.tradingFee() == 100
+
+    pool.updateTradingFee(0)
+    assert pool.tradingFee() == 0
+
+    pool.updateTradingFee(100)  # 1%
+    assert pool.tradingFee() == 100
+
+    with reverts("Trading fee should be < 100%"):
+        pool.updateTradingFee(1e4)
+
+    # update max tvl
+    with reverts("Ownable: caller is not the owner"):
+        pool.updateMaxTvl(1e18, {"from": alice})
+
+    pool.updateMaxTvl(2e18)
+    assert pool.maxTvl() == 2e18
+
+    with reverts("Max TVL exceeded"):
+        pool.buy(btcbull, 2e18, alice, {"from": alice})
+
+    pool.buy(btcbull, 1e18, alice, {"from": alice})
+
+    pool.updateMaxTvl(0)
+    assert pool.maxTvl() == 0
+
+    pool.buy(btcbull, 1e18, alice, {"from": alice})
+
+    # update max pool share
+    pool.updateMaxPoolShare(btcbear, 5000)  # 50%
+    assert pool.params(btcbull)[3] == 0
+    assert pool.params(btcbear)[3] == 5000
+
+    with reverts("Max pool share exceeded"):
+        pool.buy(btcbear, 2.1e18, alice, {"from": alice})
+
+    pool.buy(btcbear, 2e18, alice, {"from": alice})
+
+    pool.updateMaxPoolShare(btcbear, 0)
+    assert pool.params(btcbear)[3] == 0
+
+    pool.buy(btcbear, 1e18, alice, {"from": alice})
+
+    # collect fee
+    assert pool.feesAccrued() == 5e16
+
+    with reverts("Ownable: caller is not the owner"):
+        pool.collectFee({"from": alice})
+
+    balance = usdc.balanceOf(deployer)
+    pool.collectFee()
+    assert usdc.balanceOf(deployer) - balance == 5e16
+    assert pool.feesAccrued() == 0
+
+    # pause buy
+    with reverts("Ownable: caller is not the owner"):
+        pool.updateBuyPaused(btcbull, True, {"from": alice})
+
+    pool.updateBuyPaused(btcbull, True)
+
+    with reverts("Paused"):
+        pool.buy(btcbull, 1e18, alice, {"from": alice})
+    pool.buy(btcbear, 1e18, alice, {"from": alice})
+
+    pool.updateBuyPaused(btcbull, False)
+    pool.buy(btcbull, 1e18, alice, {"from": alice})
+
+    # pause sell
+    pool.updateSellPaused(btcbull, True)
+
+    with reverts("Paused"):
+        pool.sell(btcbull, 1e18, alice, {"from": alice})
+    pool.sell(btcbear, 1e18, alice, {"from": alice})
+
+    pool.updateSellPaused(btcbull, False)
+    pool.sell(btcbull, 1e18, alice, {"from": alice})
+
