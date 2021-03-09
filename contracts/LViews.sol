@@ -2,17 +2,47 @@
 
 pragma solidity ^0.6.11;
 
+import "@openzeppelin/contracts/math/SafeMath.sol";
+
 import "./LToken.sol";
 import "./LPool.sol";
 
-contract LViews {
-    function getLTokens(LPool lpool) external view returns (LToken[] memory ltokens) {
-        uint256 n = lpool.numLTokens();
-        ltokens = new LToken[](n);
+contract LHelpers {
+    using SafeMath for uint256;
+
+    function allPrices(LPool pool) external view returns (uint256[] memory prices) {
+        uint256 n = pool.numLTokens();
+        prices = new uint256[](n);
         for (uint256 i = 0; i < n; i++) {
-            ltokens[i] = lpool.lTokens(i);
+            prices[i] = pool.quote(pool.lTokens(i), 1e18);
         }
     }
+
+    function allTotalSupplies(LPool pool) external view returns (uint256[] memory totalSupplies) {
+        uint256 n = pool.numLTokens();
+        totalSupplies = new uint256[](n);
+        for (uint256 i = 0; i < n; i++) {
+            totalSupplies[i] = LToken(pool.lTokens(i)).totalSupply();
+        }
+    }
+
+    function allBalances(LPool pool, address account) external view returns (uint256[] memory balances) {
+        uint256 n = pool.numLTokens();
+        balances = new uint256[](n);
+        for (uint256 i = 0; i < n; i++) {
+            balances[i] = LToken(pool.lTokens(i)).balanceOf(account);
+        }
+    }
+
+    // allPrices
+
+    // allTotalSupplies
+
+    // allBalances
+
+    // allMaxBuyAmounts
+
+    // allParams
 
     // move belwo to periphery
     // function getLeveragedTokenPrice(address token, Side side) external view returns (uint256) {
