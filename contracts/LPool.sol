@@ -114,7 +114,7 @@ contract LPool is Ownable, ReentrancyGuard {
         require(cost <= maxCost, "Max slippage exceeded");
 
         totalValue = totalValue.add(quantity.mul(price));
-        baseToken.transferFrom(msg.sender, address(this), cost);
+        _safeTransferFromSenderToThis(cost);
         lToken.mint(to, quantity);
 
         // `maxPoolShare` being 0 means no limit
@@ -161,7 +161,7 @@ contract LPool is Ownable, ReentrancyGuard {
 
         totalValue = totalValue.sub(quantity.mul(price));
         lToken.burn(msg.sender, quantity);
-        baseToken.transfer(to, cost);
+        baseToken.safeTransfer(to, cost);
 
         emit Trade(msg.sender, to, baseToken, lToken, false, quantity, cost, feeAmount);
     }
@@ -181,19 +181,19 @@ contract LPool is Ownable, ReentrancyGuard {
         uint256 underlyingPrice = feedRegistry.getPrice(_params.underlyingToken);
         uint256 square = underlyingPrice.mul(underlyingPrice);
 
-        // invert price for short tokens and convert to 36dp
-        uint256 squareOrInv = _params.side == Side.Long ? square.mul(1e20) : uint256(1e52).div(square);
+        // invert price for short tokens and convert to 54dp
+        uint256 squareOrInv = _params.side == Side.Long ? square.mul(1e38) : uint256(1e70).div(square);
         require(squareOrInv > 0, "Price should be > 0");
 
         // set priceOffset the first time this method is called for this leveraged token
         uint256 priceOffset = _params.priceOffset;
         if (priceOffset == 0) {
-            priceOffset = _params.priceOffset = squareOrInv;
+            priceOffset = _params.priceOffset = squareOrInv.div(1e18);
         }
 
         // divide by the initial price to avoid extremely high or low prices
         // price decimals is now 18dp
-        price = squareOrInv.mul(1e18).div(priceOffset);
+        price = squareOrInv.div(priceOffset);
 
         uint256 _totalSupply = lToken.totalSupply();
         totalValue = totalValue.sub(_totalSupply.mul(_params.lastPrice)).add(_totalSupply.mul(price));
@@ -304,7 +304,7 @@ contract LPool is Ownable, ReentrancyGuard {
     }
 
     function collectFee() external onlyOwner {
-        baseToken.transfer(msg.sender, feesAccrued);
+        baseToken.safeTransfer(msg.sender, feesAccrued);
         feesAccrued = 0;
     }
 
@@ -315,6 +315,15 @@ contract LPool is Ownable, ReentrancyGuard {
     function emergencyWithdraw() external onlyOwner {
         require(!finalized, "Finalized");
         uint256 balance = baseToken.balanceOf(address(this));
-        baseToken.transfer(msg.sender, balance);
+        baseToken.safeTransfer(msg.sender, balance);
     }
+
+    function _safeTransferFromSenderToThis(uint256 amount) internal {
+        IERC20 _baseToken = baseToken;
+        uint256 balanceBefore = _baseToken.balanceOf(address(this));
+        _baseToken.safeTransferFrom(msg.sender, address(this), amount);
+        uint256 balanceAfter = _baseToken.balanceOf(address(this));
+        require(balanceAfter == balanceBefore.add(amount), "Deflationary tokens not supported");
+    }
+
 }

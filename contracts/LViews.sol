@@ -15,7 +15,7 @@ contract LViews {
      * @param lToken Leveraged token bought
      * @param quantity Quantity of leveraged tokens bought
      */
-    function buyQuote(LPool pool, LToken lToken, uint256 quantity) public view returns (uint256) {
+    function buyQuote(LPool pool, LToken lToken, uint256 quantity) external view returns (uint256) {
         uint256 cost = pool.quote(lToken, quantity).add(1);
         return cost.add(pool.fee(cost));
     }
@@ -25,7 +25,7 @@ contract LViews {
      * @param lToken Leveraged token sold
      * @param quantity Quantity of leveraged tokens sold
      */
-    function sellQuote(LPool pool, LToken lToken, uint256 quantity) public view returns (uint256) {
+    function sellQuote(LPool pool, LToken lToken, uint256 quantity) external view returns (uint256) {
         uint256 cost = pool.quote(lToken, quantity);
         return cost.sub(pool.fee(cost));
     }

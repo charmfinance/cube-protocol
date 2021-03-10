@@ -18,15 +18,15 @@ contract LToken is ERC20Upgradeable {
     /**
      * @dev Initialize the contract. Should be called exactly once immediately after deployment
      * @param _lpool The `LPool` contract that deployed this contract
-     * @param name The name of this token
-     * @param symbol The symbol of this token
+     * @param _name The name of this token
+     * @param _symbol The symbol of this token
      */
     function initialize(
         address _lpool,
-        string memory name,
-        string memory symbol
-    ) public initializer {
-        __ERC20_init(name, symbol);
+        string memory _name,
+        string memory _symbol
+    ) external initializer {
+        __ERC20_init(_name, _symbol);
         lpool = _lpool;
     }
 
