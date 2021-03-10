@@ -1,8 +1,8 @@
-from brownie import LeveragedTokenPool
+from brownie import LViews
 
 
 def main():
-    source = LeveragedTokenPool.get_verification_info()["flattened_source"]
+    source = LViews.get_verification_info()["flattened_source"]
 
-    with open("temp.sol", "w") as f:
+    with open("flat.sol", "w") as f:
         f.write(source)

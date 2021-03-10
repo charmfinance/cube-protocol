@@ -7,7 +7,7 @@ import "@openzeppelin/contracts/math/SafeMath.sol";
 import "./LToken.sol";
 import "./LPool.sol";
 
-contract LHelpers {
+contract LViews {
     using SafeMath for uint256;
 
     /**
