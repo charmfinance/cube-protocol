@@ -30,7 +30,7 @@ def main():
     pool.addLToken(snx, 0)
     pool.addLToken(snx, 1)
 
-    views = deployer.deploy(LViews)
+    views = deployer.deploy(LViews, publish_source=True)
 
     print(f"Pool address: {pool.address}")
     print(f"Views address: {views.address}")
