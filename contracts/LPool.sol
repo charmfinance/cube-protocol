@@ -13,6 +13,7 @@ import "@openzeppelin/contracts/utils/Address.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 import "./ChainlinkFeedsRegistry.sol";
+import "./LParams.sol";
 import "./LToken.sol";
 import "../interfaces/AggregatorV3Interface.sol";
 
@@ -24,7 +25,7 @@ import "../interfaces/AggregatorV3Interface.sol";
  * @title Leveraged Token Pool
  * @notice A pool that lets users buy and sell leveraged tokens
  */
-contract LPool is Ownable, ReentrancyGuard {
+contract LPool is Ownable, ReentrancyGuard, LParams {
     using Address for address;
     using SafeERC20 for IERC20;
     using SafeMath for uint256;
@@ -42,31 +43,11 @@ contract LPool is Ownable, ReentrancyGuard {
     event UpdatePrice(LToken lToken, uint256 price);
     event AddLToken(LToken lToken, address underlyingToken, Side side, string name, string symbol);
 
-    enum Side {Long, Short}
-
-    struct Params {
-        bool added; // always set to true; used to check existence
-        address underlyingToken;
-        Side side;
-        uint256 maxPoolShare; // expressed in basis points; 0 means no limit
-        bool buyPaused;
-        bool sellPaused;
-        uint256 priceOffset;
-        uint256 lastPrice;
-        uint256 lastUpdated;
-    }
-
     IERC20 baseToken;
     ChainlinkFeedsRegistry feedRegistry;
     LToken lTokenImpl;
 
-    mapping(LToken => Params) public params;
-
-    LToken[] public lTokens;
     mapping(address => mapping(Side => LToken)) public leveragedTokensMap;
-
-    uint256 public tradingFee; // expressed in basis points
-    uint256 public maxTvl; // 0 means no limit
 
     uint256 public totalValue;
     uint256 public feesAccrued;
@@ -178,6 +159,10 @@ contract LPool is Ownable, ReentrancyGuard {
         Params storage _params = params[lToken];
         require(_params.added, "Not added");
 
+        if (_params.priceUpdatePaused) {
+            return _params.lastPrice;
+        }
+
         uint256 underlyingPrice = feedRegistry.getPrice(_params.underlyingToken);
         uint256 square = underlyingPrice.mul(underlyingPrice);
 
@@ -225,18 +210,21 @@ contract LPool is Ownable, ReentrancyGuard {
             string(abi.encodePacked("charm", ERC20(underlyingToken).symbol(), (side == Side.Long ? "BULL" : "BEAR")));
         lToken.initialize(address(this), name, symbol);
 
-        params[lToken] = Params({
-            added: true,
-            underlyingToken: underlyingToken,
-            side: side,
-            maxPoolShare: 0,
-            buyPaused: false,
-            sellPaused: false,
-            priceOffset: 0,
-            lastPrice: 0,
-            lastUpdated: 0
-        });
-        lTokens.push(lToken);
+        _addParams(
+            lToken,
+            Params({
+                added: true,
+                underlyingToken: underlyingToken,
+                side: side,
+                maxPoolShare: 0,
+                buyPaused: false,
+                sellPaused: false,
+                priceUpdatePaused: false,
+                priceOffset: 0,
+                lastPrice: 0,
+                lastUpdated: 0
+            })
+        );
         leveragedTokensMap[underlyingToken][side] = lToken;
 
         updatePrice(lToken);
@@ -266,43 +254,6 @@ contract LPool is Ownable, ReentrancyGuard {
         return baseToken.balanceOf(address(this)).sub(feesAccrued);
     }
 
-    function numLTokens() external view returns (uint256) {
-        return lTokens.length;
-    }
-
-    function updateBuyPaused(LToken lToken, bool paused) external onlyOwner {
-        require(params[lToken].added, "Not added");
-        params[lToken].buyPaused = paused;
-    }
-
-    function updateSellPaused(LToken lToken, bool paused) external onlyOwner {
-        require(params[lToken].added, "Not added");
-        params[lToken].sellPaused = paused;
-    }
-
-    function pauseAll() external onlyOwner {
-        for (uint256 i = 0; i < lTokens.length; i = i.add(1)) {
-            LToken lToken = lTokens[i];
-            params[lToken].buyPaused = true;
-            params[lToken].sellPaused = true;
-        }
-    }
-
-    function updateMaxPoolShare(LToken lToken, uint256 maxPoolShare) external onlyOwner {
-        require(params[lToken].added, "Not added");
-        require(maxPoolShare < 1e4, "Max pool share should be < 100%");
-        params[lToken].maxPoolShare = maxPoolShare;
-    }
-
-    function updateMaxTvl(uint256 _maxTvl) external onlyOwner {
-        maxTvl = _maxTvl;
-    }
-
-    function updateTradingFee(uint256 _tradingFee) external onlyOwner {
-        require(_tradingFee < 1e4, "Trading fee should be < 100%");
-        tradingFee = _tradingFee;
-    }
-
     function collectFee() external onlyOwner {
         baseToken.safeTransfer(msg.sender, feesAccrued);
         feesAccrued = 0;
@@ -325,5 +276,4 @@ contract LPool is Ownable, ReentrancyGuard {
         uint256 balanceAfter = _baseToken.balanceOf(address(this));
         require(balanceAfter == balanceBefore.add(amount), "Deflationary tokens not supported");
     }
-
 }
