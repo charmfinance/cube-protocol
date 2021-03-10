@@ -7,7 +7,7 @@ autofetch_sources: true
 
 compiler:
   solc:
-    version: 0.6.11
+    version: 0.7.6
     remappings:
       - "@openzeppelin=OpenZeppelin/openzeppelin-contracts@3.4.0"
       - "@openzeppelin-upgradeable=OpenZeppelin/openzeppelin-contracts-upgradeable@3.4.0"
