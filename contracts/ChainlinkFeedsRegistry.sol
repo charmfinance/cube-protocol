@@ -26,7 +26,7 @@ contract ChainlinkFeedsRegistry is Ownable {
     mapping(address => address) public usdFeeds;
     mapping(address => address) public ethFeeds;
 
-    constructor(address _weth) public {
+    constructor(address _weth) {
         weth = _weth;
     }
 

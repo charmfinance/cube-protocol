@@ -3,7 +3,6 @@
 pragma solidity 0.7.6;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/math/Math.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
 import "@openzeppelin/contracts/proxy/Clones.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -12,10 +11,10 @@ import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/Address.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
+import "../interfaces/AggregatorV3Interface.sol";
 import "./ChainlinkFeedsRegistry.sol";
 import "./LParams.sol";
 import "./LToken.sol";
-import "../interfaces/AggregatorV3Interface.sol";
 
 // TODO
 // - test X/eth
@@ -59,7 +58,7 @@ contract LPool is Ownable, ReentrancyGuard, LParams {
      * @param _feedRegistry The `ChainlinkFeedsRegistry` contract that stores
      * chainlink feed addresses
      */
-    constructor(address _baseToken, address _feedRegistry) public {
+    constructor(address _baseToken, address _feedRegistry) {
         baseToken = IERC20(_baseToken);
         feedRegistry = ChainlinkFeedsRegistry(_feedRegistry);
         lTokenImpl = new LToken();
