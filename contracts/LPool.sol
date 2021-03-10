@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Unlicense
 
-pragma solidity 0.7.6;
+pragma solidity 0.6.11;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
@@ -78,7 +78,7 @@ contract LPool is Ownable, ReentrancyGuard {
      * @param _feedRegistry The `ChainlinkFeedsRegistry` contract that stores
      * chainlink feed addresses
      */
-    constructor(address _baseToken, address _feedRegistry) {
+    constructor(address _baseToken, address _feedRegistry) public {
         baseToken = IERC20(_baseToken);
         feedRegistry = ChainlinkFeedsRegistry(_feedRegistry);
         lTokenImpl = new LToken();

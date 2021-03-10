@@ -2,7 +2,7 @@
 
 // Adapted from https://github.com/yearn/ycredit.finance/blob/master/contracts/ChainLinkFeedsRegistry.sol
 
-pragma solidity 0.7.6;
+pragma solidity 0.6.11;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
@@ -26,7 +26,7 @@ contract ChainlinkFeedsRegistry is Ownable {
     mapping(address => address) public usdFeeds;
     mapping(address => address) public ethFeeds;
 
-    constructor(address _weth) {
+    constructor(address _weth) public {
         weth = _weth;
     }
 
