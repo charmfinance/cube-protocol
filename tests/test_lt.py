@@ -101,6 +101,7 @@ def test_add_lt(
         maxPoolShare,
         depositPaused,
         withdrawPaused,
+        priceUpdatePaused,
         priceOffset,
         lastPrice,
         lastUpdated,
@@ -111,6 +112,7 @@ def test_add_lt(
     assert maxPoolShare == 0
     assert not depositPaused
     assert not withdrawPaused
+    assert not priceUpdatePaused
     assert priceOffset == 50000 ** 2 * 1e36
     assert lastPrice == 1e18
     assert approx(lastUpdated, abs=1) == chain.time()
@@ -139,6 +141,7 @@ def test_add_lt(
         maxPoolShare,
         depositPaused,
         withdrawPaused,
+        priceUpdatePaused,
         priceOffset,
         lastPrice,
         lastUpdated,
@@ -149,6 +152,7 @@ def test_add_lt(
     assert maxPoolShare == 0
     assert not depositPaused
     assert not withdrawPaused
+    assert not priceUpdatePaused
     assert priceOffset == 50000 ** -2 * 1e36
     assert lastPrice == 1e18
     assert approx(lastUpdated, abs=1) == chain.time()
@@ -237,8 +241,8 @@ def test_buy_sell(
     assert approx(usdc.balanceOf(pool)) == sim.balance
     assert approx(pool.poolBalance()) == sim.poolBalance
     assert approx(pool.totalValue()) == sim.totalValue()
-    assert approx(pool.params(btcbull)[7]) == 1e18
-    assert approx(pool.params(btcbull)[8], abs=1) == chain.time()
+    assert approx(pool.params(btcbull)[8]) == 1e18
+    assert approx(pool.params(btcbull)[9], abs=1) == chain.time()
 
     # check events
     (ev,) = tx.events["Trade"]
@@ -273,8 +277,8 @@ def test_buy_sell(
     assert approx(usdc.balanceOf(pool)) == sim.balance
     assert approx(pool.poolBalance()) == sim.poolBalance
     assert approx(pool.totalValue()) == sim.totalValue()
-    assert approx(pool.params(btcbear)[7]) == 1e18
-    assert approx(pool.params(btcbear)[8], abs=1) == chain.time()
+    assert approx(pool.params(btcbear)[8]) == 1e18
+    assert approx(pool.params(btcbear)[9], abs=1) == chain.time()
 
     # check events
     (ev,) = tx.events["Trade"]
@@ -332,10 +336,10 @@ def test_buy_sell(
     assert approx(pool.poolBalance()) == sim.poolBalance
     assert approx(pool.totalValue()) == sim.totalValue()
     assert (
-        approx(pool.params(btcbull)[7])
+        approx(pool.params(btcbull)[8])
         == sim.prices[btcbull] / sim.initialPrices[btcbull] * 1e18
     )
-    assert approx(pool.params(btcbull)[8], abs=1) == chain.time()
+    assert approx(pool.params(btcbull)[9], abs=1) == chain.time()
 
     # check events
     (ev,) = tx.events["Trade"]
@@ -372,10 +376,10 @@ def test_buy_sell(
     assert approx(pool.poolBalance()) == 0
     assert approx(pool.totalValue()) == 0
     assert (
-        approx(pool.params(btcbear)[7])
+        approx(pool.params(btcbear)[8])
         == sim.prices[btcbear] / sim.initialPrices[btcbear] * 1e18
     )
-    assert approx(pool.params(btcbear)[8], abs=1) == chain.time()
+    assert approx(pool.params(btcbear)[9], abs=1) == chain.time()
 
     # check events
     (ev,) = tx.events["Trade"]
@@ -514,3 +518,20 @@ def test_owner_methods(
 
     pool.updateSellPaused(btcbull, False)
     pool.sell(btcbull, 1e18, 0, alice, {"from": alice})
+
+    # pause price update
+    pool.updatePriceUpdatePaused(btcbull, True)
+
+    t = pool.params(btcbull)[9]
+    pool.updatePrice(btcbull, {"from": alice})
+    assert pool.params(btcbull)[9] == t
+
+    t = pool.params(btcbear)[9]
+    pool.updatePrice(btcbear, {"from": alice})
+    assert pool.params(btcbear)[9] > t
+
+    pool.updatePriceUpdatePaused(btcbull, False)
+
+    t = pool.params(btcbull)[9]
+    pool.updatePrice(btcbull, {"from": alice})
+    assert pool.params(btcbull)[9] > t
