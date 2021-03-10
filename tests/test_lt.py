@@ -497,7 +497,7 @@ def test_owner_methods(
     assert pool.feesAccrued() == 0
 
     # pause buy
-    with reverts("Ownable: caller is not the owner"):
+    with reverts("Must be owner or guardian"):
         pool.updateBuyPaused(btcbull, True, {"from": alice})
 
     pool.updateBuyPaused(btcbull, True)
@@ -510,6 +510,9 @@ def test_owner_methods(
     pool.buy(btcbull, 1e18, 1e36, alice, {"from": alice})
 
     # pause sell
+    with reverts("Must be owner or guardian"):
+        pool.updateSellPaused(btcbull, True, {"from": alice})
+
     pool.updateSellPaused(btcbull, True)
 
     with reverts("Paused"):
@@ -520,6 +523,9 @@ def test_owner_methods(
     pool.sell(btcbull, 1e18, 0, alice, {"from": alice})
 
     # pause price update
+    with reverts("Must be owner or guardian"):
+        pool.updatePriceUpdatePaused(btcbull, True, {"from": alice})
+
     pool.updatePriceUpdatePaused(btcbull, True)
 
     t = pool.params(btcbull)[9]
@@ -538,3 +544,30 @@ def test_owner_methods(
     chain.sleep(1)
     pool.updatePrice(btcbull, {"from": alice})
     assert pool.params(btcbull)[9] > t
+
+    # add guardian
+    assert not pool.guardians(alice)
+    with reverts("Ownable: caller is not the owner"):
+        pool.addGuardian(alice, {"from": alice})
+    pool.addGuardian(alice)
+    assert pool.guardians(alice)
+
+    pool.updateBuyPaused(btcbull, True, {"from": alice})
+    pool.updateBuyPaused(btcbull, False, {"from": alice})
+
+    pool.updateSellPaused(btcbull, True, {"from": alice})
+    pool.updateSellPaused(btcbull, False, {"from": alice})
+
+    pool.updatePriceUpdatePaused(btcbull, True, {"from": alice})
+    pool.updatePriceUpdatePaused(btcbull, False, {"from": alice})
+
+    # remove guardian
+    with reverts("Must be owner or the guardian itself"):
+        pool.removeGuardian(alice, {"from": bob})
+    pool.removeGuardian(alice, {"from": alice})
+    assert not pool.guardians(alice)
+
+    pool.addGuardian(alice)
+    assert pool.guardians(alice)
+    pool.removeGuardian(alice)
+    assert not pool.guardians(alice)

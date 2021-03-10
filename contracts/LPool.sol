@@ -64,6 +64,7 @@ contract LPool is Ownable, ReentrancyGuard {
     mapping(address => mapping(Side => LToken)) public leveragedTokensMap;
     LToken[] public lTokens;
 
+    mapping(address => bool) public guardians;
     uint256 public tradingFee; // expressed in basis points
     uint256 public maxTvl; // 0 means no limit
     bool public finalized;
@@ -279,47 +280,6 @@ contract LPool is Ownable, ReentrancyGuard {
         feesAccrued = 0;
     }
 
-    function finalize() external onlyOwner {
-        finalized = true;
-    }
-
-    function emergencyWithdraw() external onlyOwner {
-        require(!finalized, "Finalized");
-        uint256 balance = baseToken.balanceOf(address(this));
-        baseToken.safeTransfer(msg.sender, balance);
-    }
-
-    function _safeTransferFromSenderToThis(uint256 amount) internal {
-        IERC20 _baseToken = baseToken;
-        uint256 balanceBefore = _baseToken.balanceOf(address(this));
-        _baseToken.safeTransferFrom(msg.sender, address(this), amount);
-        uint256 balanceAfter = _baseToken.balanceOf(address(this));
-        require(balanceAfter == balanceBefore.add(amount), "Deflationary tokens not supported");
-    }
-
-    function updateBuyPaused(LToken lToken, bool paused) external onlyOwner {
-        require(params[lToken].added, "Not added");
-        params[lToken].buyPaused = paused;
-    }
-
-    function updateSellPaused(LToken lToken, bool paused) external onlyOwner {
-        require(params[lToken].added, "Not added");
-        params[lToken].sellPaused = paused;
-    }
-
-    function updatePriceUpdatePaused(LToken lToken, bool paused) external onlyOwner {
-        require(params[lToken].added, "Not added");
-        params[lToken].priceUpdatePaused = paused;
-    }
-
-    function pauseTrading() external onlyOwner {
-        for (uint256 i = 0; i < lTokens.length; i = i.add(1)) {
-            LToken lToken = lTokens[i];
-            params[lToken].buyPaused = true;
-            params[lToken].sellPaused = true;
-        }
-    }
-
     function updateMaxPoolShare(LToken lToken, uint256 maxPoolShare) external onlyOwner {
         require(params[lToken].added, "Not added");
         require(maxPoolShare < 1e4, "Max pool share should be < 100%");
@@ -333,5 +293,67 @@ contract LPool is Ownable, ReentrancyGuard {
     function updateTradingFee(uint256 _tradingFee) external onlyOwner {
         require(_tradingFee < 1e4, "Trading fee should be < 100%");
         tradingFee = _tradingFee;
+    }
+
+    function addGuardian(address guardian) external onlyOwner {
+        require(!guardians[guardian], "Already a guardian");
+        guardians[guardian] = true;
+    }
+
+    function removeGuardian(address guardian) external {
+        require(msg.sender == owner() || msg.sender == guardian, "Must be owner or the guardian itself");
+        require(guardians[guardian], "Not a guardian");
+        guardians[guardian] = false;
+    }
+
+    function updateBuyPaused(LToken lToken, bool paused) external {
+        require(msg.sender == owner() || guardians[msg.sender], "Must be owner or guardian");
+        require(params[lToken].added, "Not added");
+        params[lToken].buyPaused = paused;
+    }
+
+    function updateSellPaused(LToken lToken, bool paused) external {
+        require(msg.sender == owner() || guardians[msg.sender], "Must be owner or guardian");
+        require(params[lToken].added, "Not added");
+        params[lToken].sellPaused = paused;
+    }
+
+    function updatePriceUpdatePaused(LToken lToken, bool paused) external {
+        require(msg.sender == owner() || guardians[msg.sender], "Must be owner or guardian");
+        require(params[lToken].added, "Not added");
+        params[lToken].priceUpdatePaused = paused;
+    }
+
+    function updateAllPaused(
+        bool buyPaused,
+        bool sellPaused,
+        bool priceUpdatePaused
+    ) external {
+        require(msg.sender == owner() || guardians[msg.sender], "Must be owner or guardian");
+        for (uint256 i = 0; i < lTokens.length; i = i.add(1)) {
+            LToken lToken = lTokens[i];
+            params[lToken].buyPaused = buyPaused;
+            params[lToken].sellPaused = sellPaused;
+            params[lToken].priceUpdatePaused = priceUpdatePaused;
+        }
+    }
+
+    function finalize() external onlyOwner {
+        finalized = true;
+    }
+
+    function emergencyWithdraw() external {
+        require(msg.sender == owner() || guardians[msg.sender], "Must be owner or guardian");
+        require(!finalized, "Finalized");
+        uint256 balance = baseToken.balanceOf(address(this));
+        baseToken.safeTransfer(owner(), balance);
+    }
+
+    function _safeTransferFromSenderToThis(uint256 amount) internal {
+        IERC20 _baseToken = baseToken;
+        uint256 balanceBefore = _baseToken.balanceOf(address(this));
+        _baseToken.safeTransferFrom(msg.sender, address(this), amount);
+        uint256 balanceAfter = _baseToken.balanceOf(address(this));
+        require(balanceAfter == balanceBefore.add(amount), "Deflationary tokens not supported");
     }
 }
