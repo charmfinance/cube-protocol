@@ -523,15 +523,18 @@ def test_owner_methods(
     pool.updatePriceUpdatePaused(btcbull, True)
 
     t = pool.params(btcbull)[9]
+    chain.sleep(1)
     pool.updatePrice(btcbull, {"from": alice})
     assert pool.params(btcbull)[9] == t
 
     t = pool.params(btcbear)[9]
+    chain.sleep(1)
     pool.updatePrice(btcbear, {"from": alice})
     assert pool.params(btcbear)[9] > t
 
     pool.updatePriceUpdatePaused(btcbull, False)
 
     t = pool.params(btcbull)[9]
+    chain.sleep(1)
     pool.updatePrice(btcbull, {"from": alice})
     assert pool.params(btcbull)[9] > t
