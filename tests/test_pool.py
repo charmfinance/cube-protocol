@@ -61,30 +61,27 @@ def test_add_lt(
     deployer, alice = a[:2]
 
     # deploy pool
-    btc = deployer.deploy(MockToken, "Bitcoin", "BTC", 8)
-    weth = deployer.deploy(MockToken, "Wrapped Ether", "ETH", 18)
-
-    feedsRegistry = deployer.deploy(ChainlinkFeedsRegistry, weth)
+    feedsRegistry = deployer.deploy(ChainlinkFeedsRegistry)
     pool = deployer.deploy(CubePool, feedsRegistry)
 
     with reverts("Ownable: caller is not the owner"):
-        pool.addCubeToken(btc, LONG, {"from": alice})
+        pool.addCubeToken("BTC", LONG, {"from": alice})
 
     with reverts("Price should be > 0"):
-        pool.addCubeToken(btc, LONG)
+        pool.addCubeToken("BTC", LONG)
 
     btcusd = deployer.deploy(MockAggregatorV3Interface)
     btcusd.setPrice(50000 * 1e8)
-    feedsRegistry.addUsdFeed(btc, btcusd)
-    assert feedsRegistry.getPrice(btc) == 50000 * 1e8
+    feedsRegistry.addUsdFeed("BTC", btcusd)
+    assert feedsRegistry.getPrice("BTC") == 50000 * 1e8
 
     btcusd.setPrice(0)
     with reverts("Price should be > 0"):
-        pool.addCubeToken(btc, LONG)
+        pool.addCubeToken("BTC", LONG)
 
     # add bull token
     btcusd.setPrice(50000 * 1e8)
-    tx = pool.addCubeToken(btc, LONG)
+    tx = pool.addCubeToken("BTC", LONG)
 
     cubebtc = CubeToken.at(tx.return_value)
     assert cubebtc.name() == "BTC Cube Token"
@@ -105,7 +102,7 @@ def test_add_lt(
         lastUpdated,
     ) = pool.params(cubebtc)
     assert added
-    assert token == btc
+    assert token == "BTC"
     assert side == LONG
     assert maxPoolShare == 0
     assert not depositPaused
@@ -118,13 +115,11 @@ def test_add_lt(
     # check event
     (ev,) = tx.events["AddCubeToken"]
     assert ev["cubeToken"] == cubebtc
-    assert ev["underlyingToken"] == btc
+    assert ev["underlyingSymbol"] == "BTC"
     assert ev["side"] == LONG
-    assert ev["name"] == "BTC Cube Token"
-    assert ev["symbol"] == "cubeBTC"
 
     # add bear token
-    tx = pool.addCubeToken(btc, SHORT)
+    tx = pool.addCubeToken("BTC", SHORT)
 
     invbtc = CubeToken.at(tx.return_value)
     assert invbtc.name() == "BTC Inverse Cube Token"
@@ -145,7 +140,7 @@ def test_add_lt(
         lastUpdated,
     ) = pool.params(invbtc)
     assert added
-    assert token == btc
+    assert token == "BTC"
     assert side == SHORT
     assert maxPoolShare == 0
     assert not depositPaused
@@ -158,17 +153,15 @@ def test_add_lt(
     # check event
     (ev,) = tx.events["AddCubeToken"]
     assert ev["cubeToken"] == invbtc
-    assert ev["underlyingToken"] == btc
+    assert ev["underlyingSymbol"] == "BTC"
     assert ev["side"] == SHORT
-    assert ev["name"] == "BTC Inverse Cube Token"
-    assert ev["symbol"] == "invBTC"
 
     assert pool.numCubeTokens() == 2
     assert pool.cubeTokens(0) == cubebtc
     assert pool.cubeTokens(1) == invbtc
 
     with reverts("Already added"):
-        pool.addCubeToken(btc, LONG)
+        pool.addCubeToken("BTC", LONG)
 
 
 @pytest.mark.parametrize("px1,px2", [(50000, 40000), (1e8, 1e7), (1, 1e1)])
@@ -187,26 +180,23 @@ def test_buy_and_sell(
     deployer, alice, bob = a[:3]
 
     # deploy pool
-    btc = deployer.deploy(MockToken, "Bitcoin", "BTC", 8)
-    weth = deployer.deploy(MockToken, "Wrapped Ether", "ETH", 18)
-
-    feedsRegistry = deployer.deploy(ChainlinkFeedsRegistry, weth)
+    feedsRegistry = deployer.deploy(ChainlinkFeedsRegistry)
     pool = deployer.deploy(CubePool, feedsRegistry)
 
     btcusd = deployer.deploy(MockAggregatorV3Interface)
     btcusd.setPrice(px1 * 1e8)
-    feedsRegistry.addUsdFeed(btc, btcusd)
+    feedsRegistry.addUsdFeed("BTC", btcusd)
 
-    tx = pool.addCubeToken(btc, LONG)
+    tx = pool.addCubeToken("BTC", LONG)
     cubebtc = CubeToken.at(tx.return_value)
 
-    tx = pool.addCubeToken(btc, SHORT)
+    tx = pool.addCubeToken("BTC", SHORT)
     invbtc = CubeToken.at(tx.return_value)
 
     with reverts("Not added"):
         pool.buy(ZERO_ADDRESS, alice, {"from": bob})
 
-    assert feedsRegistry.getPrice(btc) == px1 * 1e8
+    assert feedsRegistry.getPrice("BTC") == px1 * 1e8
 
     pool.updateTradingFee(100)  # 1%
 
@@ -278,7 +268,7 @@ def test_buy_and_sell(
 
     # change oracle price
     btcusd.setPrice(px2 * 1e8)
-    assert feedsRegistry.getPrice(btc) == px2 * 1e8
+    assert feedsRegistry.getPrice("BTC") == px2 * 1e8
     assert approx(pool.balance()) == sim.balance
     assert approx(pool.poolBalance()) == sim.poolBalance
     assert approx(pool.totalValue()) == sim.totalValue()
@@ -384,20 +374,17 @@ def test_owner_methods(
     deployer, alice, bob = a[:3]
 
     # deploy pool
-    btc = deployer.deploy(MockToken, "Bitcoin", "BTC", 8)
-    weth = deployer.deploy(MockToken, "Wrapped Ether", "ETH", 18)
-
-    feedsRegistry = deployer.deploy(ChainlinkFeedsRegistry, weth)
+    feedsRegistry = deployer.deploy(ChainlinkFeedsRegistry)
     pool = deployer.deploy(CubePool, feedsRegistry)
 
     btcusd = deployer.deploy(MockAggregatorV3Interface)
     btcusd.setPrice(50000 * 1e8)
-    feedsRegistry.addUsdFeed(btc, btcusd)
+    feedsRegistry.addUsdFeed("BTC", btcusd)
 
-    tx = pool.addCubeToken(btc, LONG)
+    tx = pool.addCubeToken("BTC", LONG)
     cubebtc = CubeToken.at(tx.return_value)
 
-    tx = pool.addCubeToken(btc, SHORT)
+    tx = pool.addCubeToken("BTC", SHORT)
     invbtc = CubeToken.at(tx.return_value)
 
     # update trading fee

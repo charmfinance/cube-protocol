@@ -37,14 +37,12 @@ contract CubePool is Ownable, ReentrancyGuard {
         uint256 cost
     );
     event UpdatePrice(CubeToken cubeToken, uint256 price);
-    event AddCubeToken(CubeToken cubeToken, address underlyingToken, Side side, string name, string symbol);
-
-    enum Side {Long, Short}
+    event AddCubeToken(CubeToken cubeToken, string underlyingSymbol, CubeToken.Side side);
 
     struct Params {
         bool added; // always set to true; used to check existence
-        address underlyingToken;
-        Side side;
+        string underlyingSymbol;
+        CubeToken.Side side;
         uint256 maxPoolShare; // expressed in basis points; 0 means no limit
         bool buyPaused;
         bool sellPaused;
@@ -58,7 +56,7 @@ contract CubePool is Ownable, ReentrancyGuard {
     CubeToken lTokenImpl;
 
     mapping(CubeToken => Params) public params;
-    mapping(address => mapping(Side => CubeToken)) public cubeTokensMap;
+    mapping(string => mapping(CubeToken.Side => CubeToken)) public cubeTokensMap;
     CubeToken[] public cubeTokens;
 
     mapping(address => bool) public guardians;
@@ -78,7 +76,7 @@ contract CubePool is Ownable, ReentrancyGuard {
         lTokenImpl = new CubeToken();
 
         // initialize with dummy data so that it can't be initialized again
-        lTokenImpl.initialize(address(0), "", "");
+        lTokenImpl.initialize(address(0), "", CubeToken.Side.Long);
     }
 
     /**
@@ -160,11 +158,11 @@ contract CubePool is Ownable, ReentrancyGuard {
             return _params.lastPrice;
         }
 
-        uint256 spot = feedRegistry.getPrice(_params.underlyingToken);
+        uint256 spot = feedRegistry.getPrice(_params.underlyingSymbol);
         uint256 cube = spot.mul(spot).mul(spot);
 
         // invert price for short tokens and convert to 48dp
-        uint256 cubeOrInv = _params.side == Side.Long ? cube.mul(1e24) : uint256(1e72).div(cube);
+        uint256 cubeOrInv = _params.side == CubeToken.Side.Long ? cube.mul(1e24) : uint256(1e72).div(cube);
         require(cubeOrInv > 0, "Price should be > 0");
 
         // set initialPrice the first time this method is called for this leveraged token
@@ -187,32 +185,23 @@ contract CubePool is Ownable, ReentrancyGuard {
 
     /**
      * @notice Add a new leveraged token. Can only be called by owner
-     * @param underlyingToken The ERC-20 whose price is used
+     * @param underlyingSymbol The ERC-20 whose price is used
      * @param side Long or short
      * @return address Address of leveraged token that was added
      */
-    function addCubeToken(address underlyingToken, Side side) external onlyOwner returns (address) {
-        require(side == Side.Short || side == Side.Long, "Invalid side");
-        require(address(cubeTokensMap[underlyingToken][side]) == address(0), "Already added");
+    function addCubeToken(string memory underlyingSymbol, CubeToken.Side side) external onlyOwner returns (address) {
+        require(side == CubeToken.Side.Short || side == CubeToken.Side.Long, "Invalid side");
+        require(address(cubeTokensMap[underlyingSymbol][side]) == address(0), "Already added");
 
-        bytes32 salt = keccak256(abi.encodePacked(underlyingToken, side));
+        bytes32 salt = keccak256(abi.encodePacked(underlyingSymbol, side));
         address instance = Clones.cloneDeterministic(address(lTokenImpl), salt);
         CubeToken cubeToken = CubeToken(instance);
 
-        string memory name =
-            string(
-                abi.encodePacked(
-                    ERC20(underlyingToken).symbol(),
-                    (side == Side.Long ? " Cube Token" : " Inverse Cube Token")
-                )
-            );
-        string memory symbol =
-            string(abi.encodePacked((side == Side.Long ? "cube" : "inv"), ERC20(underlyingToken).symbol()));
-        cubeToken.initialize(address(this), name, symbol);
+        cubeToken.initialize(address(this), underlyingSymbol, side);
 
         params[cubeToken] = Params({
             added: true,
-            underlyingToken: underlyingToken,
+            underlyingSymbol: underlyingSymbol,
             side: side,
             maxPoolShare: 0,
             buyPaused: false,
@@ -222,11 +211,11 @@ contract CubePool is Ownable, ReentrancyGuard {
             lastPrice: 0,
             lastUpdated: 0
         });
-        cubeTokensMap[underlyingToken][side] = cubeToken;
+        cubeTokensMap[underlyingSymbol][side] = cubeToken;
         cubeTokens.push(cubeToken);
 
         updatePrice(cubeToken);
-        emit AddCubeToken(cubeToken, underlyingToken, side, name, symbol);
+        emit AddCubeToken(cubeToken, underlyingSymbol, side);
         return instance;
     }
 

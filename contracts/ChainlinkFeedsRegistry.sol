@@ -22,24 +22,19 @@ contract ChainlinkFeedsRegistry is Ownable {
     using SafeERC20 for IERC20;
     using SafeMath for uint256;
 
-    address public weth;
-    mapping(address => address) public usdFeeds;
-    mapping(address => address) public ethFeeds;
-
-    constructor(address _weth) public {
-        weth = _weth;
-    }
+    mapping(string => address) public usdFeeds;
+    mapping(string => address) public ethFeeds;
 
     /**
      * @notice Get price in usd multiplied by 1e8
      * @param token ERC20 token whose price we want
      */
-    function getPrice(address token) external view returns (uint256) {
+    function getPrice(string memory token) external view returns (uint256) {
         if (usdFeeds[token] != address(0)) {
             return _latestPrice(usdFeeds[token]);
-        } else if (ethFeeds[token] != address(0) && usdFeeds[weth] != address(0)) {
+        } else if (ethFeeds[token] != address(0) && usdFeeds["ETH"] != address(0)) {
             uint256 price1 = _latestPrice(ethFeeds[token]);
-            uint256 price2 = _latestPrice(usdFeeds[weth]);
+            uint256 price2 = _latestPrice(usdFeeds["ETH"]);
 
             // chainlink usd feeds are multiplied by 1e8 and eth feeds by 1e18 so need to divide by 1e18
             return price1.mul(price2).div(1e18);
@@ -58,7 +53,7 @@ contract ChainlinkFeedsRegistry is Ownable {
      * @notice Add token/usd chainlink feed to registry
      * @param token ERC20 token for which feed is being added
      */
-    function addUsdFeed(address token, address feed) external onlyOwner {
+    function addUsdFeed(string memory token, address feed) external onlyOwner {
         require(_latestPrice(feed) > 0, "Price should be > 0");
         usdFeeds[token] = feed;
     }
@@ -67,7 +62,7 @@ contract ChainlinkFeedsRegistry is Ownable {
      * @notice Add token/eth chainlink feed to registry
      * @param token ERC20 token for which feed is being added
      */
-    function addEthFeed(address token, address feed) external onlyOwner {
+    function addEthFeed(string memory token, address feed) external onlyOwner {
         require(_latestPrice(feed) > 0, "Price should be > 0");
         ethFeeds[token] = feed;
     }
