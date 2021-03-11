@@ -182,22 +182,22 @@ contract LPool is Ownable, ReentrancyGuard {
             return _params.lastPrice;
         }
 
-        uint256 underlyingPrice = feedRegistry.getPrice(_params.underlyingToken);
-        uint256 square = underlyingPrice.mul(underlyingPrice);
+        uint256 spot = feedRegistry.getPrice(_params.underlyingToken);
+        uint256 cube = spot.mul(spot).mul(spot);
 
-        // invert price for short tokens and convert to 54dp
-        uint256 squareOrInv = _params.side == Side.Long ? square.mul(1e38) : uint256(1e70).div(square);
-        require(squareOrInv > 0, "Price should be > 0");
+        // invert price for short tokens and convert to 48dp
+        uint256 cubeOrInv = _params.side == Side.Long ? cube.mul(1e24) : uint256(1e72).div(cube);
+        require(cubeOrInv > 0, "Price should be > 0");
 
         // set priceOffset the first time this method is called for this leveraged token
         uint256 priceOffset = _params.priceOffset;
         if (priceOffset == 0) {
-            priceOffset = _params.priceOffset = squareOrInv.div(1e18);
+            priceOffset = _params.priceOffset = cubeOrInv.div(1e18);
         }
 
         // divide by the initial price to avoid extremely high or low prices
         // price decimals is now 18dp
-        price = squareOrInv.div(priceOffset);
+        price = cubeOrInv.div(priceOffset);
 
         uint256 _totalSupply = lToken.totalSupply();
         totalValue = totalValue.sub(_totalSupply.mul(_params.lastPrice)).add(_totalSupply.mul(price));
@@ -223,10 +223,10 @@ contract LPool is Ownable, ReentrancyGuard {
 
         string memory name =
             string(
-                abi.encodePacked("Charm 2X ", (side == Side.Long ? "Long " : "Short "), ERC20(underlyingToken).name())
+                abi.encodePacked(ERC20(underlyingToken).symbol(), (side == Side.Long ? " Cube Token" : " Inverse Cube Token"))
             );
         string memory symbol =
-            string(abi.encodePacked("charm", ERC20(underlyingToken).symbol(), (side == Side.Long ? "BULL" : "BEAR")));
+            string(abi.encodePacked((side == Side.Long ? "cube" : "inv"), ERC20(underlyingToken).symbol()));
         lToken.initialize(address(this), name, symbol);
 
         params[lToken] = Params({
