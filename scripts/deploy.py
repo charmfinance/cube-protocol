@@ -23,12 +23,12 @@ def main():
     feeds.addEthFeed(wbtc, "0x2431452A0010a43878bF198e170F6319Af6d27F4")  # btc
     feeds.addUsdFeed(snx, "0xE96C4407597CD507002dF88ff6E0008AB41266Ee")  # snx
 
-    pool = deployer.deploy(CubePool, weth, feeds, publish_source=True)
+    pool = deployer.deploy(CubePool, feeds, publish_source=True)
 
-    pool.addLToken(wbtc, 0)
-    pool.addLToken(wbtc, 1)
-    pool.addLToken(snx, 0)
-    pool.addLToken(snx, 1)
+    pool.addCubeToken(wbtc, 0)
+    pool.addCubeToken(wbtc, 1)
+    pool.addCubeToken(snx, 0)
+    pool.addCubeToken(snx, 1)
 
     views = deployer.deploy(CubeViews, publish_source=True)
 
