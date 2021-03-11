@@ -13,7 +13,7 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 import "../interfaces/AggregatorV3Interface.sol";
 import "./ChainlinkFeedsRegistry.sol";
-import "./LToken.sol";
+import "./CubeToken.sol";
 
 // TODO
 // - test X/eth
@@ -23,7 +23,7 @@ import "./LToken.sol";
  * @title Leveraged Token Pool
  * @notice A pool that lets users buy and sell leveraged tokens
  */
-contract LPool is Ownable, ReentrancyGuard {
+contract CubePool is Ownable, ReentrancyGuard {
     using Address for address;
     using SafeERC20 for IERC20;
     using SafeMath for uint256;
@@ -31,13 +31,13 @@ contract LPool is Ownable, ReentrancyGuard {
     event Trade(
         address indexed sender,
         address indexed to,
-        LToken lToken,
+        CubeToken cubeToken,
         bool isBuy,
         uint256 quantity,
         uint256 cost
     );
-    event UpdatePrice(LToken lToken, uint256 price);
-    event AddLToken(LToken lToken, address underlyingToken, Side side, string name, string symbol);
+    event UpdatePrice(CubeToken cubeToken, uint256 price);
+    event AddCubeToken(CubeToken cubeToken, address underlyingToken, Side side, string name, string symbol);
 
     enum Side {Long, Short}
 
@@ -55,11 +55,11 @@ contract LPool is Ownable, ReentrancyGuard {
     }
 
     ChainlinkFeedsRegistry feedRegistry;
-    LToken lTokenImpl;
+    CubeToken lTokenImpl;
 
-    mapping(LToken => Params) public params;
-    mapping(address => mapping(Side => LToken)) public leveragedTokensMap;
-    LToken[] public lTokens;
+    mapping(CubeToken => Params) public params;
+    mapping(address => mapping(Side => CubeToken)) public cubeTokensMap;
+    CubeToken[] public cubeTokens;
 
     mapping(address => bool) public guardians;
     uint256 public tradingFee; // expressed in basis points
@@ -75,7 +75,7 @@ contract LPool is Ownable, ReentrancyGuard {
      */
     constructor(address _feedRegistry) public {
         feedRegistry = ChainlinkFeedsRegistry(_feedRegistry);
-        lTokenImpl = new LToken();
+        lTokenImpl = new CubeToken();
 
         // initialize with dummy data so that it can't be initialized again
         lTokenImpl.initialize(address(0), "", "");
@@ -83,30 +83,27 @@ contract LPool is Ownable, ReentrancyGuard {
 
     /**
      * @notice Buy leveraged tokens
-     * @param lToken The leveraged token to buy
+     * @param cubeToken The leveraged token to buy
      * @param to The address that receives the leveraged tokens
      * @return cubeTokensOut The amount of base tokens paid
      */
-    function buy(
-        LToken lToken,
-        address to
-    ) external payable nonReentrant returns (uint256 cubeTokensOut) {
-        Params storage _params = params[lToken];
+    function buy(CubeToken cubeToken, address to) external payable nonReentrant returns (uint256 cubeTokensOut) {
+        Params storage _params = params[cubeToken];
         require(_params.added, "Not added");
         require(!_params.buyPaused, "Paused");
 
-        uint256 price = updatePrice(lToken);
+        uint256 price = updatePrice(cubeToken);
         uint256 ethIn = subtractFee(msg.value);
-        cubeTokensOut = getQuantityFromCost(lToken, ethIn);
+        cubeTokensOut = getQuantityFromCost(cubeToken, ethIn);
 
         poolBalance = poolBalance.add(ethIn);
         totalValue = totalValue.add(cubeTokensOut.mul(price));
-        lToken.mint(to, cubeTokensOut);
+        cubeToken.mint(to, cubeTokensOut);
 
         // `maxPoolShare` being 0 means no limit
         uint256 maxPoolShare = _params.maxPoolShare;
         if (maxPoolShare > 0) {
-            uint256 lTokenValue = lToken.totalSupply().mul(price);
+            uint256 lTokenValue = cubeToken.totalSupply().mul(price);
             require(lTokenValue.mul(1e4) <= maxPoolShare.mul(totalValue), "Max pool share exceeded");
         }
 
@@ -115,36 +112,36 @@ contract LPool is Ownable, ReentrancyGuard {
             require(poolBalance <= maxTvl, "Max TVL exceeded");
         }
 
-        emit Trade(msg.sender, to, lToken, true, cubeTokensOut, msg.value);
+        emit Trade(msg.sender, to, cubeToken, true, cubeTokensOut, msg.value);
     }
 
     /**
      * @notice Sell leveraged tokens
-     * @param lToken The leveraged token to sell
+     * @param cubeToken The leveraged token to sell
      * @param cubeTokensIn The quantity of leveraged tokens to sell
      * @param to The address that receives the sale amount
      * @return ethOut The amount of base tokens returned
      */
     function sell(
-        LToken lToken,
+        CubeToken cubeToken,
         uint256 cubeTokensIn,
         address to
     ) external nonReentrant returns (uint256 ethOut) {
-        Params storage _params = params[lToken];
+        Params storage _params = params[cubeToken];
         require(_params.added, "Not added");
         require(!_params.sellPaused, "Paused");
 
-        uint256 price = updatePrice(lToken);
-        ethOut = getCostFromQuantity(lToken, cubeTokensIn);
+        uint256 price = updatePrice(cubeToken);
+        ethOut = getCostFromQuantity(cubeToken, cubeTokensIn);
 
         poolBalance = poolBalance.sub(ethOut);
         totalValue = totalValue.sub(cubeTokensIn.mul(price));
-        lToken.burn(msg.sender, cubeTokensIn);
+        cubeToken.burn(msg.sender, cubeTokensIn);
 
         ethOut = subtractFee(ethOut);
         payable(to).transfer(ethOut);
 
-        emit Trade(msg.sender, to, lToken, false, cubeTokensIn, ethOut);
+        emit Trade(msg.sender, to, cubeToken, false, cubeTokensIn, ethOut);
     }
 
     /**
@@ -152,11 +149,11 @@ contract LPool is Ownable, ReentrancyGuard {
      * automatically called when this leveraged token is bought or sold. However
      * if it has not been traded for a while, it should be called periodically
      * so that the total value does get too far out of sync
-     * @param lToken Leveraged token whose price is updated
+     * @param cubeToken Leveraged token whose price is updated
      * @return price Updated unnormalized leveraged token price
      */
-    function updatePrice(LToken lToken) public returns (uint256 price) {
-        Params storage _params = params[lToken];
+    function updatePrice(CubeToken cubeToken) public returns (uint256 price) {
+        Params storage _params = params[cubeToken];
         require(_params.added, "Not added");
 
         if (_params.priceUpdatePaused) {
@@ -180,12 +177,12 @@ contract LPool is Ownable, ReentrancyGuard {
         // price decimals is now 18dp
         price = cubeOrInv.div(initialPrice);
 
-        uint256 _totalSupply = lToken.totalSupply();
+        uint256 _totalSupply = cubeToken.totalSupply();
         totalValue = totalValue.sub(_totalSupply.mul(_params.lastPrice)).add(_totalSupply.mul(price));
         _params.lastPrice = price;
         _params.lastUpdated = block.timestamp;
 
-        emit UpdatePrice(lToken, price);
+        emit UpdatePrice(cubeToken, price);
     }
 
     /**
@@ -194,23 +191,26 @@ contract LPool is Ownable, ReentrancyGuard {
      * @param side Long or short
      * @return address Address of leveraged token that was added
      */
-    function addLToken(address underlyingToken, Side side) external onlyOwner returns (address) {
+    function addCubeToken(address underlyingToken, Side side) external onlyOwner returns (address) {
         require(side == Side.Short || side == Side.Long, "Invalid side");
-        require(address(leveragedTokensMap[underlyingToken][side]) == address(0), "Already added");
+        require(address(cubeTokensMap[underlyingToken][side]) == address(0), "Already added");
 
         bytes32 salt = keccak256(abi.encodePacked(underlyingToken, side));
         address instance = Clones.cloneDeterministic(address(lTokenImpl), salt);
-        LToken lToken = LToken(instance);
+        CubeToken cubeToken = CubeToken(instance);
 
         string memory name =
             string(
-                abi.encodePacked(ERC20(underlyingToken).symbol(), (side == Side.Long ? " Cube Token" : " Inverse Cube Token"))
+                abi.encodePacked(
+                    ERC20(underlyingToken).symbol(),
+                    (side == Side.Long ? " Cube Token" : " Inverse Cube Token")
+                )
             );
         string memory symbol =
             string(abi.encodePacked((side == Side.Long ? "cube" : "inv"), ERC20(underlyingToken).symbol()));
-        lToken.initialize(address(this), name, symbol);
+        cubeToken.initialize(address(this), name, symbol);
 
-        params[lToken] = Params({
+        params[cubeToken] = Params({
             added: true,
             underlyingToken: underlyingToken,
             side: side,
@@ -222,21 +222,21 @@ contract LPool is Ownable, ReentrancyGuard {
             lastPrice: 0,
             lastUpdated: 0
         });
-        leveragedTokensMap[underlyingToken][side] = lToken;
-        lTokens.push(lToken);
+        cubeTokensMap[underlyingToken][side] = cubeToken;
+        cubeTokens.push(cubeToken);
 
-        updatePrice(lToken);
-        emit AddLToken(lToken, underlyingToken, side, name, symbol);
+        updatePrice(cubeToken);
+        emit AddCubeToken(cubeToken, underlyingToken, side, name, symbol);
         return instance;
     }
 
     /**
      * @notice Amount received by selling leveraged tokens
-     * @param lToken The leveraged token sold
+     * @param cubeToken The leveraged token sold
      * @param cost Quantity of leveraged tokens sold
      */
-    function getQuantityFromCost(LToken lToken, uint256 cost) public view returns (uint256) {
-        Params storage _params = params[lToken];
+    function getQuantityFromCost(CubeToken cubeToken, uint256 cost) public view returns (uint256) {
+        Params storage _params = params[cubeToken];
         require(_params.added, "Not added");
 
         uint256 _poolBalance = poolBalance;
@@ -245,11 +245,11 @@ contract LPool is Ownable, ReentrancyGuard {
 
     /**
      * @notice Amount received by selling leveraged tokens
-     * @param lToken The leveraged token sold
+     * @param cubeToken The leveraged token sold
      * @param quantity Quantity of leveraged tokens sold
      */
-    function getCostFromQuantity(LToken lToken, uint256 quantity) public view returns (uint256) {
-        Params storage _params = params[lToken];
+    function getCostFromQuantity(CubeToken cubeToken, uint256 quantity) public view returns (uint256) {
+        Params storage _params = params[cubeToken];
         require(_params.added, "Not added");
 
         uint256 _totalValue = totalValue;
@@ -260,8 +260,8 @@ contract LPool is Ownable, ReentrancyGuard {
         return cost.sub(cost.mul(tradingFee).div(1e4));
     }
 
-    function numLTokens() external view returns (uint256) {
-        return lTokens.length;
+    function numCubeTokens() external view returns (uint256) {
+        return cubeTokens.length;
     }
 
     function feesAccrued() public view returns (uint256) {
@@ -272,10 +272,10 @@ contract LPool is Ownable, ReentrancyGuard {
         msg.sender.transfer(feesAccrued());
     }
 
-    function updateMaxPoolShare(LToken lToken, uint256 maxPoolShare) external onlyOwner {
-        require(params[lToken].added, "Not added");
+    function updateMaxPoolShare(CubeToken cubeToken, uint256 maxPoolShare) external onlyOwner {
+        require(params[cubeToken].added, "Not added");
         require(maxPoolShare < 1e4, "Max pool share should be < 100%");
-        params[lToken].maxPoolShare = maxPoolShare;
+        params[cubeToken].maxPoolShare = maxPoolShare;
     }
 
     function updateMaxTvl(uint256 _maxTvl) external onlyOwner {
@@ -298,22 +298,22 @@ contract LPool is Ownable, ReentrancyGuard {
         guardians[guardian] = false;
     }
 
-    function updateBuyPaused(LToken lToken, bool paused) external {
+    function updateBuyPaused(CubeToken cubeToken, bool paused) external {
         require(msg.sender == owner() || guardians[msg.sender], "Must be owner or guardian");
-        require(params[lToken].added, "Not added");
-        params[lToken].buyPaused = paused;
+        require(params[cubeToken].added, "Not added");
+        params[cubeToken].buyPaused = paused;
     }
 
-    function updateSellPaused(LToken lToken, bool paused) external {
+    function updateSellPaused(CubeToken cubeToken, bool paused) external {
         require(msg.sender == owner() || guardians[msg.sender], "Must be owner or guardian");
-        require(params[lToken].added, "Not added");
-        params[lToken].sellPaused = paused;
+        require(params[cubeToken].added, "Not added");
+        params[cubeToken].sellPaused = paused;
     }
 
-    function updatePriceUpdatePaused(LToken lToken, bool paused) external {
+    function updatePriceUpdatePaused(CubeToken cubeToken, bool paused) external {
         require(msg.sender == owner() || guardians[msg.sender], "Must be owner or guardian");
-        require(params[lToken].added, "Not added");
-        params[lToken].priceUpdatePaused = paused;
+        require(params[cubeToken].added, "Not added");
+        params[cubeToken].priceUpdatePaused = paused;
     }
 
     function updateAllPaused(
@@ -322,11 +322,11 @@ contract LPool is Ownable, ReentrancyGuard {
         bool priceUpdatePaused
     ) external {
         require(msg.sender == owner() || guardians[msg.sender], "Must be owner or guardian");
-        for (uint256 i = 0; i < lTokens.length; i = i.add(1)) {
-            LToken lToken = lTokens[i];
-            params[lToken].buyPaused = buyPaused;
-            params[lToken].sellPaused = sellPaused;
-            params[lToken].priceUpdatePaused = priceUpdatePaused;
+        for (uint256 i = 0; i < cubeTokens.length; i = i.add(1)) {
+            CubeToken cubeToken = cubeTokens[i];
+            params[cubeToken].buyPaused = buyPaused;
+            params[cubeToken].sellPaused = sellPaused;
+            params[cubeToken].priceUpdatePaused = priceUpdatePaused;
         }
     }
 

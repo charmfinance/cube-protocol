@@ -5,10 +5,10 @@ pragma experimental ABIEncoderV2;
 
 import "@openzeppelin/contracts/math/SafeMath.sol";
 
-import "./LToken.sol";
-import "./LPool.sol";
+import "./CubeToken.sol";
+import "./CubePool.sol";
 
-contract LViews {
+contract CubeViews {
     using SafeMath for uint256;
 
     // /**
@@ -17,8 +17,8 @@ contract LViews {
     //  * @param quantity Quantity of leveraged tokens bought
     //  */
     // function buyQuote(
-    //     LPool pool,
-    //     LToken lToken,
+    //     CubePool pool,
+    //     CubeToken lToken,
     //     uint256 quantity
     // ) external view returns (uint256) {
     //     uint256 cost = pool.quote(lToken, quantity).add(1);
@@ -31,51 +31,51 @@ contract LViews {
     //  * @param quantity Quantity of leveraged tokens sold
     //  */
     // function sellQuote(
-    //     LPool pool,
-    //     LToken lToken,
+    //     CubePool pool,
+    //     CubeToken lToken,
     //     uint256 quantity
     // ) external view returns (uint256) {
     //     uint256 cost = pool.quote(lToken, quantity);
     //     return cost.sub(pool.fee(cost));
     // }
 
-    // function allPrices(LPool pool) external view returns (uint256[] memory prices) {
-    //     uint256 n = pool.numLTokens();
+    // function allPrices(CubePool pool) external view returns (uint256[] memory prices) {
+    //     uint256 n = pool.numCubeTokens();
     //     prices = new uint256[](n);
     //     for (uint256 i = 0; i < n; i++) {
-    //         prices[i] = pool.quote(pool.lTokens(i), 1e18);
+    //         prices[i] = pool.quote(pool.cubeTokens(i), 1e18);
     //     }
     // }
 
-    function allNames(LPool pool) external view returns (string[] memory names) {
-        uint256 n = pool.numLTokens();
+    function allNames(CubePool pool) external view returns (string[] memory names) {
+        uint256 n = pool.numCubeTokens();
         names = new string[](n);
         for (uint256 i = 0; i < n; i++) {
-            names[i] = LToken(pool.lTokens(i)).name();
+            names[i] = CubeToken(pool.cubeTokens(i)).name();
         }
     }
 
-    function allSymbols(LPool pool) external view returns (string[] memory symbols) {
-        uint256 n = pool.numLTokens();
+    function allSymbols(CubePool pool) external view returns (string[] memory symbols) {
+        uint256 n = pool.numCubeTokens();
         symbols = new string[](n);
         for (uint256 i = 0; i < n; i++) {
-            symbols[i] = LToken(pool.lTokens(i)).symbol();
+            symbols[i] = CubeToken(pool.cubeTokens(i)).symbol();
         }
     }
 
-    function allTotalSupplies(LPool pool) external view returns (uint256[] memory totalSupplies) {
-        uint256 n = pool.numLTokens();
+    function allTotalSupplies(CubePool pool) external view returns (uint256[] memory totalSupplies) {
+        uint256 n = pool.numCubeTokens();
         totalSupplies = new uint256[](n);
         for (uint256 i = 0; i < n; i++) {
-            totalSupplies[i] = LToken(pool.lTokens(i)).totalSupply();
+            totalSupplies[i] = CubeToken(pool.cubeTokens(i)).totalSupply();
         }
     }
 
-    function allBalances(LPool pool, address account) external view returns (uint256[] memory balances) {
-        uint256 n = pool.numLTokens();
+    function allBalances(CubePool pool, address account) external view returns (uint256[] memory balances) {
+        uint256 n = pool.numCubeTokens();
         balances = new uint256[](n);
         for (uint256 i = 0; i < n; i++) {
-            balances[i] = LToken(pool.lTokens(i)).balanceOf(account);
+            balances[i] = CubeToken(pool.cubeTokens(i)).balanceOf(account);
         }
     }
 
@@ -91,7 +91,7 @@ contract LViews {
 
     // move belwo to periphery
     // function getLeveragedTokenPrice(address token, Side side) external view returns (uint256) {
-    //     uint256 price = getSquarePrice(ltoken.token(), ltoken.side());
+    //     uint256 price = getSquarePrice(cubeToken.token(), cubeToken.side());
     //     return price.div(totalValue);
     // }
 
@@ -99,8 +99,8 @@ contract LViews {
     //     uint256 n = leveragedTokens.length;
     //     prices = new uint256[n];
     //     for (uint256 i = 0; i < n; i++) {
-    //         LToken ltoken = leveragedTokens[i];
-    //         prices[i] = getLeveragedTokenPrice(ltoken.token(), ltoken.side());
+    //         CubeToken cubeToken = leveragedTokens[i];
+    //         prices[i] = getLeveragedTokenPrice(cubeToken.token(), cubeToken.side());
     //     }
     // }
 
@@ -108,16 +108,16 @@ contract LViews {
     //     uint256 n = leveragedTokens.length;
     //     values = new uint256[n];
     //     for (uint256 i = 0; i < n; i++) {
-    //         LToken ltoken = leveragedTokens[i];
-    //         values[i] = getLeveragedTokenPrices(ltoken).mul(ltoken.totalSupply());
+    //         CubeToken cubeToken = leveragedTokens[i];
+    //         values[i] = getLeveragedTokenPrices(cubeToken).mul(cubeToken.totalSupply());
     //     }
     // }
 
-    // function getAccountValues(LToken ltoken, address account) external view returns (uint256 values) {
+    // function getAccountValues(CubeToken cubeToken, address account) external view returns (uint256 values) {
     //     uint256 n = leveragedTokens.length;
     //     values = new uint256[n];
     //     for (uint256 i = 0; i < n; i++) {
-    //         values[i] = getLeveragedTokenPrices(ltoken).mul(ltoken.balanceOf(account));
+    //         values[i] = getLeveragedTokenPrices(cubeToken).mul(cubeToken.balanceOf(account));
     //     }
     // }
 
@@ -127,7 +127,7 @@ contract LViews {
     //     amounts = new uint256[n];
     //     for (uint256 i = 0; i < n; i++) {
     //         uint256 maxAmount1 = maxTvl.sub(getBalance());
-    //         uint256 maxAmount2 = maxPoolShare.mul(totalValue).sub(getLeveragedTokenValue(ltoken));
+    //         uint256 maxAmount2 = maxPoolShare.mul(totalValue).sub(getLeveragedTokenValue(cubeToken));
     //         amounts[i] = Math.min(maxAmount1, maxAmount2);
     //     }
     // }

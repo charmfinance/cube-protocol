@@ -1,8 +1,8 @@
-from brownie import LViews
+from brownie import CubeViews
 
 
 def main():
-    source = LViews.get_verification_info()["flattened_source"]
+    source = CubeViews.get_verification_info()["flattened_source"]
 
     with open("flat.sol", "w") as f:
         f.write(source)

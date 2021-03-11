@@ -52,8 +52,8 @@ class Sim(object):
 
 def test_add_lt(
     a,
-    LPool,
-    LToken,
+    CubePool,
+    CubeToken,
     ChainlinkFeedsRegistry,
     MockToken,
     MockAggregatorV3Interface,
@@ -65,13 +65,13 @@ def test_add_lt(
     weth = deployer.deploy(MockToken, "Wrapped Ether", "ETH", 18)
 
     feedsRegistry = deployer.deploy(ChainlinkFeedsRegistry, weth)
-    pool = deployer.deploy(LPool, feedsRegistry)
+    pool = deployer.deploy(CubePool, feedsRegistry)
 
     with reverts("Ownable: caller is not the owner"):
-        pool.addLToken(btc, LONG, {"from": alice})
+        pool.addCubeToken(btc, LONG, {"from": alice})
 
     with reverts("Price should be > 0"):
-        pool.addLToken(btc, LONG)
+        pool.addCubeToken(btc, LONG)
 
     btcusd = deployer.deploy(MockAggregatorV3Interface)
     btcusd.setPrice(50000 * 1e8)
@@ -80,17 +80,17 @@ def test_add_lt(
 
     btcusd.setPrice(0)
     with reverts("Price should be > 0"):
-        pool.addLToken(btc, LONG)
+        pool.addCubeToken(btc, LONG)
 
     # add bull token
     btcusd.setPrice(50000 * 1e8)
-    tx = pool.addLToken(btc, LONG)
+    tx = pool.addCubeToken(btc, LONG)
 
-    cubebtc = LToken.at(tx.return_value)
+    cubebtc = CubeToken.at(tx.return_value)
     assert cubebtc.name() == "BTC Cube Token"
     assert cubebtc.symbol() == "cubeBTC"
-    assert pool.numLTokens() == 1
-    assert pool.lTokens(0) == cubebtc
+    assert pool.numCubeTokens() == 1
+    assert pool.cubeTokens(0) == cubebtc
 
     (
         added,
@@ -116,21 +116,21 @@ def test_add_lt(
     assert approx(lastUpdated, abs=1) == chain.time()
 
     # check event
-    (ev,) = tx.events["AddLToken"]
-    assert ev["lToken"] == cubebtc
+    (ev,) = tx.events["AddCubeToken"]
+    assert ev["cubeToken"] == cubebtc
     assert ev["underlyingToken"] == btc
     assert ev["side"] == LONG
     assert ev["name"] == "BTC Cube Token"
     assert ev["symbol"] == "cubeBTC"
 
     # add bear token
-    tx = pool.addLToken(btc, SHORT)
+    tx = pool.addCubeToken(btc, SHORT)
 
-    invbtc = LToken.at(tx.return_value)
+    invbtc = CubeToken.at(tx.return_value)
     assert invbtc.name() == "BTC Inverse Cube Token"
     assert invbtc.symbol() == "invBTC"
-    assert pool.numLTokens() == 2
-    assert pool.lTokens(1) == invbtc
+    assert pool.numCubeTokens() == 2
+    assert pool.cubeTokens(1) == invbtc
 
     (
         added,
@@ -156,27 +156,27 @@ def test_add_lt(
     assert approx(lastUpdated, abs=1) == chain.time()
 
     # check event
-    (ev,) = tx.events["AddLToken"]
-    assert ev["lToken"] == invbtc
+    (ev,) = tx.events["AddCubeToken"]
+    assert ev["cubeToken"] == invbtc
     assert ev["underlyingToken"] == btc
     assert ev["side"] == SHORT
     assert ev["name"] == "BTC Inverse Cube Token"
     assert ev["symbol"] == "invBTC"
 
-    assert pool.numLTokens() == 2
-    assert pool.lTokens(0) == cubebtc
-    assert pool.lTokens(1) == invbtc
+    assert pool.numCubeTokens() == 2
+    assert pool.cubeTokens(0) == cubebtc
+    assert pool.cubeTokens(1) == invbtc
 
     with reverts("Already added"):
-        pool.addLToken(btc, LONG)
+        pool.addCubeToken(btc, LONG)
 
 
 @pytest.mark.parametrize("px1,px2", [(50000, 40000), (1e8, 1e7), (1, 1e1)])
 @pytest.mark.parametrize("qty", [1, 1e-8, 10])
 def test_buy_and_sell(
     a,
-    LPool,
-    LToken,
+    CubePool,
+    CubeToken,
     ChainlinkFeedsRegistry,
     MockToken,
     MockAggregatorV3Interface,
@@ -191,17 +191,17 @@ def test_buy_and_sell(
     weth = deployer.deploy(MockToken, "Wrapped Ether", "ETH", 18)
 
     feedsRegistry = deployer.deploy(ChainlinkFeedsRegistry, weth)
-    pool = deployer.deploy(LPool, feedsRegistry)
+    pool = deployer.deploy(CubePool, feedsRegistry)
 
     btcusd = deployer.deploy(MockAggregatorV3Interface)
     btcusd.setPrice(px1 * 1e8)
     feedsRegistry.addUsdFeed(btc, btcusd)
 
-    tx = pool.addLToken(btc, LONG)
-    cubebtc = LToken.at(tx.return_value)
+    tx = pool.addCubeToken(btc, LONG)
+    cubebtc = CubeToken.at(tx.return_value)
 
-    tx = pool.addLToken(btc, SHORT)
-    invbtc = LToken.at(tx.return_value)
+    tx = pool.addCubeToken(btc, SHORT)
+    invbtc = CubeToken.at(tx.return_value)
 
     with reverts("Not added"):
         pool.buy(ZERO_ADDRESS, alice, {"from": bob})
@@ -237,12 +237,12 @@ def test_buy_and_sell(
     (ev,) = tx.events["Trade"]
     assert ev["sender"] == bob
     assert ev["to"] == alice
-    assert ev["lToken"] == cubebtc
+    assert ev["cubeToken"] == cubebtc
     assert ev["isBuy"]
     assert approx(ev["quantity"]) == qty * 1e18
     assert approx(ev["cost"]) == cost
     (ev,) = tx.events["UpdatePrice"]
-    assert ev["lToken"] == cubebtc
+    assert ev["cubeToken"] == cubebtc
     assert (
         approx(ev["price"]) == sim.prices[cubebtc] / sim.initialPrices[cubebtc] * 1e18
     )
@@ -268,15 +268,13 @@ def test_buy_and_sell(
     (ev,) = tx.events["Trade"]
     assert ev["sender"] == bob
     assert ev["to"] == alice
-    assert ev["lToken"] == invbtc
+    assert ev["cubeToken"] == invbtc
     assert ev["isBuy"]
     assert approx(ev["quantity"]) == qty * 1e18
     assert approx(ev["cost"]) == cost
     (ev,) = tx.events["UpdatePrice"]
-    assert ev["lToken"] == invbtc
-    assert (
-        approx(ev["price"]) == sim.prices[invbtc] / sim.initialPrices[invbtc] * 1e18
-    )
+    assert ev["cubeToken"] == invbtc
+    assert approx(ev["price"]) == sim.prices[invbtc] / sim.initialPrices[invbtc] * 1e18
 
     # change oracle price
     btcusd.setPrice(px2 * 1e8)
@@ -324,13 +322,13 @@ def test_buy_and_sell(
     (ev,) = tx.events["Trade"]
     assert ev["sender"] == alice
     assert ev["to"] == bob
-    assert ev["lToken"] == cubebtc
+    assert ev["cubeToken"] == cubebtc
     assert not ev["isBuy"]
     assert approx(ev["quantity"]) == quantity
     assert approx(ev["cost"], rel=1e-4) == cost
 
     (ev,) = tx.events["UpdatePrice"]
-    assert ev["lToken"] == cubebtc
+    assert ev["cubeToken"] == cubebtc
     assert (
         approx(ev["price"]) == sim.prices[cubebtc] / sim.initialPrices[cubebtc] * 1e18
     )
@@ -360,15 +358,13 @@ def test_buy_and_sell(
     (ev,) = tx.events["Trade"]
     assert ev["sender"] == alice
     assert ev["to"] == bob
-    assert ev["lToken"] == invbtc
+    assert ev["cubeToken"] == invbtc
     assert not ev["isBuy"]
     assert approx(ev["quantity"]) == quantity
     assert approx(ev["cost"], rel=1e-4) == cost
     (ev,) = tx.events["UpdatePrice"]
-    assert ev["lToken"] == invbtc
-    assert (
-        approx(ev["price"]) == sim.prices[invbtc] / sim.initialPrices[invbtc] * 1e18
-    )
+    assert ev["cubeToken"] == invbtc
+    assert approx(ev["price"]) == sim.prices[invbtc] / sim.initialPrices[invbtc] * 1e18
 
     # buying 0 does nothing
     assert pool.buy(cubebtc, alice, {"from": bob}).return_value == 0
@@ -379,8 +375,8 @@ def test_buy_and_sell(
 
 def test_owner_methods(
     a,
-    LPool,
-    LToken,
+    CubePool,
+    CubeToken,
     ChainlinkFeedsRegistry,
     MockToken,
     MockAggregatorV3Interface,
@@ -392,17 +388,17 @@ def test_owner_methods(
     weth = deployer.deploy(MockToken, "Wrapped Ether", "ETH", 18)
 
     feedsRegistry = deployer.deploy(ChainlinkFeedsRegistry, weth)
-    pool = deployer.deploy(LPool, feedsRegistry)
+    pool = deployer.deploy(CubePool, feedsRegistry)
 
     btcusd = deployer.deploy(MockAggregatorV3Interface)
     btcusd.setPrice(50000 * 1e8)
     feedsRegistry.addUsdFeed(btc, btcusd)
 
-    tx = pool.addLToken(btc, LONG)
-    cubebtc = LToken.at(tx.return_value)
+    tx = pool.addCubeToken(btc, LONG)
+    cubebtc = CubeToken.at(tx.return_value)
 
-    tx = pool.addLToken(btc, SHORT)
-    invbtc = LToken.at(tx.return_value)
+    tx = pool.addCubeToken(btc, SHORT)
+    invbtc = CubeToken.at(tx.return_value)
 
     # update trading fee
     with reverts("Ownable: caller is not the owner"):
