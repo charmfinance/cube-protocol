@@ -100,7 +100,7 @@ def test_add_lt(
         depositPaused,
         withdrawPaused,
         priceUpdatePaused,
-        priceOffset,
+        initialPrice,
         lastPrice,
         lastUpdated,
     ) = pool.params(cubebtc)
@@ -111,7 +111,7 @@ def test_add_lt(
     assert not depositPaused
     assert not withdrawPaused
     assert not priceUpdatePaused
-    assert approx(priceOffset) == 50000 ** 3 * 1e30
+    assert approx(initialPrice) == 50000 ** 3 * 1e30
     assert lastPrice == 1e18
     assert approx(lastUpdated, abs=1) == chain.time()
 
@@ -140,7 +140,7 @@ def test_add_lt(
         depositPaused,
         withdrawPaused,
         priceUpdatePaused,
-        priceOffset,
+        initialPrice,
         lastPrice,
         lastUpdated,
     ) = pool.params(invbtc)
@@ -151,7 +151,7 @@ def test_add_lt(
     assert not depositPaused
     assert not withdrawPaused
     assert not priceUpdatePaused
-    assert approx(priceOffset) == 50000 ** -3 * 1e30
+    assert approx(initialPrice) == 50000 ** -3 * 1e30
     assert lastPrice == 1e18
     assert approx(lastUpdated, abs=1) == chain.time()
 

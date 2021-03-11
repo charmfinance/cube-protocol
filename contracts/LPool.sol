@@ -49,7 +49,7 @@ contract LPool is Ownable, ReentrancyGuard {
         bool buyPaused;
         bool sellPaused;
         bool priceUpdatePaused;
-        uint256 priceOffset;
+        uint256 initialPrice;
         uint256 lastPrice;
         uint256 lastUpdated;
     }
@@ -170,15 +170,15 @@ contract LPool is Ownable, ReentrancyGuard {
         uint256 cubeOrInv = _params.side == Side.Long ? cube.mul(1e24) : uint256(1e72).div(cube);
         require(cubeOrInv > 0, "Price should be > 0");
 
-        // set priceOffset the first time this method is called for this leveraged token
-        uint256 priceOffset = _params.priceOffset;
-        if (priceOffset == 0) {
-            priceOffset = _params.priceOffset = cubeOrInv.div(1e18);
+        // set initialPrice the first time this method is called for this leveraged token
+        uint256 initialPrice = _params.initialPrice;
+        if (initialPrice == 0) {
+            initialPrice = _params.initialPrice = cubeOrInv.div(1e18);
         }
 
         // divide by the initial price to avoid extremely high or low prices
         // price decimals is now 18dp
-        price = cubeOrInv.div(priceOffset);
+        price = cubeOrInv.div(initialPrice);
 
         uint256 _totalSupply = lToken.totalSupply();
         totalValue = totalValue.sub(_totalSupply.mul(_params.lastPrice)).add(_totalSupply.mul(price));
@@ -218,7 +218,7 @@ contract LPool is Ownable, ReentrancyGuard {
             buyPaused: false,
             sellPaused: false,
             priceUpdatePaused: false,
-            priceOffset: 0,
+            initialPrice: 0,
             lastPrice: 0,
             lastUpdated: 0
         });
@@ -258,10 +258,6 @@ contract LPool is Ownable, ReentrancyGuard {
 
     function subtractFee(uint256 cost) public view returns (uint256) {
         return cost.sub(cost.mul(tradingFee).div(1e4));
-    }
-
-    function fee(uint256 cost) public view returns (uint256) {
-        return cost.mul(tradingFee).div(1e4);
     }
 
     function numLTokens() external view returns (uint256) {
