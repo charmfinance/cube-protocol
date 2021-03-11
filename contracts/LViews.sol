@@ -11,41 +11,41 @@ import "./LPool.sol";
 contract LViews {
     using SafeMath for uint256;
 
-    /**
-     * @notice Cost to buy leveraged tokens
-     * @param lToken Leveraged token bought
-     * @param quantity Quantity of leveraged tokens bought
-     */
-    function buyQuote(
-        LPool pool,
-        LToken lToken,
-        uint256 quantity
-    ) external view returns (uint256) {
-        uint256 cost = pool.quote(lToken, quantity).add(1);
-        return cost.add(pool.fee(cost));
-    }
+    // /**
+    //  * @notice Cost to buy leveraged tokens
+    //  * @param lToken Leveraged token bought
+    //  * @param quantity Quantity of leveraged tokens bought
+    //  */
+    // function buyQuote(
+    //     LPool pool,
+    //     LToken lToken,
+    //     uint256 quantity
+    // ) external view returns (uint256) {
+    //     uint256 cost = pool.quote(lToken, quantity).add(1);
+    //     return cost.add(pool.fee(cost));
+    // }
 
-    /**
-     * @notice Amount received by selling leveraged tokens
-     * @param lToken Leveraged token sold
-     * @param quantity Quantity of leveraged tokens sold
-     */
-    function sellQuote(
-        LPool pool,
-        LToken lToken,
-        uint256 quantity
-    ) external view returns (uint256) {
-        uint256 cost = pool.quote(lToken, quantity);
-        return cost.sub(pool.fee(cost));
-    }
+    // /**
+    //  * @notice Amount received by selling leveraged tokens
+    //  * @param lToken Leveraged token sold
+    //  * @param quantity Quantity of leveraged tokens sold
+    //  */
+    // function sellQuote(
+    //     LPool pool,
+    //     LToken lToken,
+    //     uint256 quantity
+    // ) external view returns (uint256) {
+    //     uint256 cost = pool.quote(lToken, quantity);
+    //     return cost.sub(pool.fee(cost));
+    // }
 
-    function allPrices(LPool pool) external view returns (uint256[] memory prices) {
-        uint256 n = pool.numLTokens();
-        prices = new uint256[](n);
-        for (uint256 i = 0; i < n; i++) {
-            prices[i] = pool.quote(pool.lTokens(i), 1e18);
-        }
-    }
+    // function allPrices(LPool pool) external view returns (uint256[] memory prices) {
+    //     uint256 n = pool.numLTokens();
+    //     prices = new uint256[](n);
+    //     for (uint256 i = 0; i < n; i++) {
+    //         prices[i] = pool.quote(pool.lTokens(i), 1e18);
+    //     }
+    // }
 
     function allNames(LPool pool) external view returns (string[] memory names) {
         uint256 n = pool.numLTokens();

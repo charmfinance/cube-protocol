@@ -31,12 +31,10 @@ contract LPool is Ownable, ReentrancyGuard {
     event Trade(
         address indexed sender,
         address indexed to,
-        IERC20 baseToken,
         LToken lToken,
         bool isBuy,
         uint256 quantity,
-        uint256 cost,
-        uint256 feeAmount
+        uint256 cost
     );
     event UpdatePrice(LToken lToken, uint256 price);
     event AddLToken(LToken lToken, address underlyingToken, Side side, string name, string symbol);
@@ -56,7 +54,6 @@ contract LPool is Ownable, ReentrancyGuard {
         uint256 lastUpdated;
     }
 
-    IERC20 baseToken;
     ChainlinkFeedsRegistry feedRegistry;
     LToken lTokenImpl;
 
@@ -70,16 +67,13 @@ contract LPool is Ownable, ReentrancyGuard {
     bool public finalized;
 
     uint256 public totalValue;
-    uint256 public feesAccrued;
+    uint256 public poolBalance;
 
     /**
-     * @param _baseToken The token held by this contract. Users buy and sell leveraged
-     * tokens with `baseToken`
      * @param _feedRegistry The `ChainlinkFeedsRegistry` contract that stores
      * chainlink feed addresses
      */
-    constructor(address _baseToken, address _feedRegistry) public {
-        baseToken = IERC20(_baseToken);
+    constructor(address _feedRegistry) public {
         feedRegistry = ChainlinkFeedsRegistry(_feedRegistry);
         lTokenImpl = new LToken();
 
@@ -90,32 +84,24 @@ contract LPool is Ownable, ReentrancyGuard {
     /**
      * @notice Buy leveraged tokens
      * @param lToken The leveraged token to buy
-     * @param quantity The quantity of leveraged tokens to buy
-     * @param maxCost Revert if more than this amount is paid
      * @param to The address that receives the leveraged tokens
-     * @return cost The amount of base tokens paid
+     * @return cubeTokensOut The amount of base tokens paid
      */
     function buy(
         LToken lToken,
-        uint256 quantity,
-        uint256 maxCost,
         address to
-    ) external nonReentrant returns (uint256 cost) {
+    ) external payable nonReentrant returns (uint256 cubeTokensOut) {
         Params storage _params = params[lToken];
         require(_params.added, "Not added");
         require(!_params.buyPaused, "Paused");
 
         uint256 price = updatePrice(lToken);
-        cost = quote(lToken, quantity).add(1);
+        uint256 ethIn = subtractFee(msg.value);
+        cubeTokensOut = getQuantityFromCost(lToken, ethIn);
 
-        uint256 feeAmount = fee(cost);
-        feesAccrued = feesAccrued.add(feeAmount);
-        cost = cost.add(feeAmount);
-        require(cost <= maxCost, "Max slippage exceeded");
-
-        totalValue = totalValue.add(quantity.mul(price));
-        _safeTransferFromSenderToThis(cost);
-        lToken.mint(to, quantity);
+        poolBalance = poolBalance.add(ethIn);
+        totalValue = totalValue.add(cubeTokensOut.mul(price));
+        lToken.mint(to, cubeTokensOut);
 
         // `maxPoolShare` being 0 means no limit
         uint256 maxPoolShare = _params.maxPoolShare;
@@ -126,44 +112,39 @@ contract LPool is Ownable, ReentrancyGuard {
 
         // `maxTvl` being 0 means no limit
         if (maxTvl > 0) {
-            require(poolBalance() <= maxTvl, "Max TVL exceeded");
+            require(poolBalance <= maxTvl, "Max TVL exceeded");
         }
 
-        emit Trade(msg.sender, to, baseToken, lToken, true, quantity, cost, feeAmount);
-        return cost;
+        emit Trade(msg.sender, to, lToken, true, cubeTokensOut, msg.value);
     }
 
     /**
      * @notice Sell leveraged tokens
      * @param lToken The leveraged token to sell
-     * @param quantity The quantity of leveraged tokens to sell
-     * @param minCost Revert if less than this amount is returned
+     * @param cubeTokensIn The quantity of leveraged tokens to sell
      * @param to The address that receives the sale amount
-     * @return cost The amount of base tokens returned
+     * @return ethOut The amount of base tokens returned
      */
     function sell(
         LToken lToken,
-        uint256 quantity,
-        uint256 minCost,
+        uint256 cubeTokensIn,
         address to
-    ) external nonReentrant returns (uint256 cost) {
+    ) external nonReentrant returns (uint256 ethOut) {
         Params storage _params = params[lToken];
         require(_params.added, "Not added");
         require(!_params.sellPaused, "Paused");
 
         uint256 price = updatePrice(lToken);
-        cost = quote(lToken, quantity);
+        ethOut = getCostFromQuantity(lToken, cubeTokensIn);
 
-        uint256 feeAmount = fee(cost);
-        feesAccrued = feesAccrued.add(feeAmount);
-        cost = cost.sub(feeAmount);
-        require(cost >= minCost, "Max slippage exceeded");
+        poolBalance = poolBalance.sub(ethOut);
+        totalValue = totalValue.sub(cubeTokensIn.mul(price));
+        lToken.burn(msg.sender, cubeTokensIn);
 
-        totalValue = totalValue.sub(quantity.mul(price));
-        lToken.burn(msg.sender, quantity);
-        baseToken.safeTransfer(to, cost);
+        ethOut = subtractFee(ethOut);
+        payable(to).transfer(ethOut);
 
-        emit Trade(msg.sender, to, baseToken, lToken, false, quantity, cost, feeAmount);
+        emit Trade(msg.sender, to, lToken, false, cubeTokensIn, ethOut);
     }
 
     /**
@@ -252,32 +233,47 @@ contract LPool is Ownable, ReentrancyGuard {
     /**
      * @notice Amount received by selling leveraged tokens
      * @param lToken The leveraged token sold
+     * @param cost Quantity of leveraged tokens sold
+     */
+    function getQuantityFromCost(LToken lToken, uint256 cost) public view returns (uint256) {
+        Params storage _params = params[lToken];
+        require(_params.added, "Not added");
+
+        uint256 _poolBalance = poolBalance;
+        return _poolBalance > 0 ? cost.mul(totalValue).div(_params.lastPrice).div(_poolBalance) : cost;
+    }
+
+    /**
+     * @notice Amount received by selling leveraged tokens
+     * @param lToken The leveraged token sold
      * @param quantity Quantity of leveraged tokens sold
      */
-    function quote(LToken lToken, uint256 quantity) public view returns (uint256 cost) {
+    function getCostFromQuantity(LToken lToken, uint256 quantity) public view returns (uint256) {
         Params storage _params = params[lToken];
         require(_params.added, "Not added");
 
         uint256 _totalValue = totalValue;
-        return _totalValue > 0 ? quantity.mul(_params.lastPrice).mul(poolBalance()).div(_totalValue) : quantity;
+        return _totalValue > 0 ? quantity.mul(_params.lastPrice).mul(poolBalance).div(_totalValue) : quantity;
+    }
+
+    function subtractFee(uint256 cost) public view returns (uint256) {
+        return cost.sub(cost.mul(tradingFee).div(1e4));
     }
 
     function fee(uint256 cost) public view returns (uint256) {
         return cost.mul(tradingFee).div(1e4);
     }
 
-    function poolBalance() public view returns (uint256) {
-        // subtract fees so that we only count the balance backing the leveraged tokens
-        return baseToken.balanceOf(address(this)).sub(feesAccrued);
-    }
-
     function numLTokens() external view returns (uint256) {
         return lTokens.length;
     }
 
+    function feesAccrued() public view returns (uint256) {
+        return address(this).balance.sub(poolBalance);
+    }
+
     function collectFee() external onlyOwner {
-        baseToken.safeTransfer(msg.sender, feesAccrued);
-        feesAccrued = 0;
+        msg.sender.transfer(feesAccrued());
     }
 
     function updateMaxPoolShare(LToken lToken, uint256 maxPoolShare) external onlyOwner {
@@ -345,15 +341,6 @@ contract LPool is Ownable, ReentrancyGuard {
     function emergencyWithdraw() external {
         require(msg.sender == owner() || guardians[msg.sender], "Must be owner or guardian");
         require(!finalized, "Finalized");
-        uint256 balance = baseToken.balanceOf(address(this));
-        baseToken.safeTransfer(owner(), balance);
-    }
-
-    function _safeTransferFromSenderToThis(uint256 amount) internal {
-        IERC20 _baseToken = baseToken;
-        uint256 balanceBefore = _baseToken.balanceOf(address(this));
-        _baseToken.safeTransferFrom(msg.sender, address(this), amount);
-        uint256 balanceAfter = _baseToken.balanceOf(address(this));
-        require(balanceAfter == balanceBefore.add(amount), "Deflationary tokens not supported");
+        payable(owner()).transfer(address(this).balance);
     }
 }
