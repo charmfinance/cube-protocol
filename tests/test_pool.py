@@ -16,10 +16,10 @@ class Sim(object):
         self.poolBalance = 0
         self.feeAccrued = 0
 
-    def buy(self, symbol, quantity):
+    def mint(self, symbol, quantity):
         return self._trade(symbol, quantity, 1) / 0.99
 
-    def sell(self, symbol, quantity):
+    def burn(self, symbol, quantity):
         return self._trade(symbol, quantity, -1) * 0.99
 
     def _trade(self, symbol, quantity, sign):
@@ -166,7 +166,7 @@ def test_add_lt(
 
 @pytest.mark.parametrize("px1,px2", [(50000, 40000), (1e8, 1e7), (1, 1e1)])
 @pytest.mark.parametrize("qty", [1, 1e-8, 10])
-def test_buy_and_sell(
+def test_mint_and_burn(
     a,
     CubePool,
     CubeToken,
@@ -194,7 +194,7 @@ def test_buy_and_sell(
     invbtc = CubeToken.at(tx.return_value)
 
     with reverts("Not added"):
-        pool.buy(ZERO_ADDRESS, alice, {"from": bob})
+        pool.mint(ZERO_ADDRESS, alice, {"from": bob})
 
     assert feedsRegistry.getPrice("BTC") == px1 * 1e8
 
@@ -207,12 +207,12 @@ def test_buy_and_sell(
     sim.initialPrices[invbtc] = px1 ** -3
 
     # check btc bull token price
-    cost = sim.buy(cubebtc, qty)
+    cost = sim.mint(cubebtc, qty)
 
-    # buy 1 btc bull token
+    # mint 1 btc bull token
     bobBalance = bob.balance()
     poolBalance = pool.balance()
-    tx = pool.buy(cubebtc, alice, {"from": bob, "value": cost})
+    tx = pool.mint(cubebtc, alice, {"from": bob, "value": cost})
     assert approx(tx.return_value) == qty * 1e18
     assert approx(bobBalance - bob.balance()) == cost
     assert approx(pool.balance() - poolBalance) == cost
@@ -224,11 +224,11 @@ def test_buy_and_sell(
     assert approx(pool.params(cubebtc)[9], abs=1) == chain.time()
 
     # check events
-    (ev,) = tx.events["Trade"]
+    (ev,) = tx.events["MintOrBurn"]
     assert ev["sender"] == bob
     assert ev["to"] == alice
     assert ev["cubeToken"] == cubebtc
-    assert ev["isBuy"]
+    assert ev["isMint"]
     assert approx(ev["quantity"]) == qty * 1e18
     assert approx(ev["cost"]) == cost
     (ev,) = tx.events["UpdatePrice"]
@@ -238,12 +238,12 @@ def test_buy_and_sell(
     )
 
     # check btc bear token price
-    cost = sim.buy(invbtc, qty)
+    cost = sim.mint(invbtc, qty)
 
-    # buy 1 btc bear token
+    # mint 1 btc bear token
     bobBalance = bob.balance()
     poolBalance = pool.balance()
-    tx = pool.buy(invbtc, alice, {"from": bob, "value": cost})
+    tx = pool.mint(invbtc, alice, {"from": bob, "value": cost})
     assert approx(tx.return_value) == qty * 1e18
     assert approx(bobBalance - bob.balance()) == cost
     assert approx(pool.balance() - poolBalance) == cost
@@ -255,11 +255,11 @@ def test_buy_and_sell(
     assert approx(pool.params(invbtc)[9], abs=1) == chain.time()
 
     # check events
-    (ev,) = tx.events["Trade"]
+    (ev,) = tx.events["MintOrBurn"]
     assert ev["sender"] == bob
     assert ev["to"] == alice
     assert ev["cubeToken"] == invbtc
-    assert ev["isBuy"]
+    assert ev["isMint"]
     assert approx(ev["quantity"]) == qty * 1e18
     assert approx(ev["cost"]) == cost
     (ev,) = tx.events["UpdatePrice"]
@@ -289,12 +289,12 @@ def test_buy_and_sell(
 
     # check btc bull token price
     quantity = cubebtc.balanceOf(alice)
-    cost = sim.sell(cubebtc, quantity / 1e18)
+    cost = sim.burn(cubebtc, quantity / 1e18)
 
-    # sell 1 btc bull token
+    # burn 1 btc bull token
     bobBalance = bob.balance()
     poolBalance = pool.balance()
-    tx = pool.sell(cubebtc, quantity, bob, {"from": alice})
+    tx = pool.burn(cubebtc, quantity, bob, {"from": alice})
     assert approx(tx.return_value, rel=1e-4) == cost
     assert approx(bob.balance() - bobBalance, rel=1e-4) == cost
     assert approx(poolBalance - pool.balance(), rel=1e-4) == cost
@@ -309,11 +309,11 @@ def test_buy_and_sell(
     assert approx(pool.params(cubebtc)[9], abs=1) == chain.time()
 
     # check events
-    (ev,) = tx.events["Trade"]
+    (ev,) = tx.events["MintOrBurn"]
     assert ev["sender"] == alice
     assert ev["to"] == bob
     assert ev["cubeToken"] == cubebtc
-    assert not ev["isBuy"]
+    assert not ev["isMint"]
     assert approx(ev["quantity"]) == quantity
     assert approx(ev["cost"], rel=1e-4) == cost
 
@@ -325,12 +325,12 @@ def test_buy_and_sell(
 
     # check btc bear token price
     quantity = invbtc.balanceOf(alice)
-    cost = sim.sell(invbtc, quantity / 1e18)
+    cost = sim.burn(invbtc, quantity / 1e18)
 
-    # sell 1 btc bear token
+    # burn 1 btc bear token
     bobBalance = bob.balance()
     poolBalance = pool.balance()
-    tx = pool.sell(invbtc, quantity, bob, {"from": alice})
+    tx = pool.burn(invbtc, quantity, bob, {"from": alice})
     assert approx(tx.return_value, rel=1e-4) == cost
     assert approx(bob.balance() - bobBalance, rel=1e-4) == cost
     assert approx(poolBalance - pool.balance(), rel=1e-4) == cost
@@ -345,22 +345,22 @@ def test_buy_and_sell(
     assert approx(pool.params(invbtc)[9], abs=1) == chain.time()
 
     # check events
-    (ev,) = tx.events["Trade"]
+    (ev,) = tx.events["MintOrBurn"]
     assert ev["sender"] == alice
     assert ev["to"] == bob
     assert ev["cubeToken"] == invbtc
-    assert not ev["isBuy"]
+    assert not ev["isMint"]
     assert approx(ev["quantity"]) == quantity
     assert approx(ev["cost"], rel=1e-4) == cost
     (ev,) = tx.events["UpdatePrice"]
     assert ev["cubeToken"] == invbtc
     assert approx(ev["price"]) == sim.prices[invbtc] / sim.initialPrices[invbtc] * 1e18
 
-    # buying 0 does nothing
-    assert pool.buy(cubebtc, alice, {"from": bob}).return_value == 0
+    # mint 0 does nothing
+    assert pool.mint(cubebtc, alice, {"from": bob}).return_value == 0
 
-    # selling 0 does nothing
-    assert pool.sell(cubebtc, 0, bob, {"from": alice}).return_value == 0
+    # burn 0 does nothing
+    assert pool.burn(cubebtc, 0, bob, {"from": alice}).return_value == 0
 
 
 def test_owner_methods(
@@ -411,14 +411,14 @@ def test_owner_methods(
     assert pool.maxTvl() == 2e18
 
     with reverts("Max TVL exceeded"):
-        pool.buy(cubebtc, alice, {"from": alice, "value": 2.03e18})
+        pool.mint(cubebtc, alice, {"from": alice, "value": 2.03e18})
 
-    pool.buy(cubebtc, alice, {"from": alice, "value": 2e18})
+    pool.mint(cubebtc, alice, {"from": alice, "value": 2e18})
 
     pool.updateMaxTvl(0)
     assert pool.maxTvl() == 0
 
-    pool.buy(cubebtc, alice, {"from": alice, "value": 1e18})
+    pool.mint(cubebtc, alice, {"from": alice, "value": 1e18})
 
     # update max pool share
     pool.updateMaxPoolShare(invbtc, 5000)  # 50%
@@ -426,14 +426,14 @@ def test_owner_methods(
     assert pool.params(invbtc)[3] == 5000
 
     with reverts("Max pool share exceeded"):
-        pool.buy(invbtc, alice, {"from": alice, "value": 3.04e18})
+        pool.mint(invbtc, alice, {"from": alice, "value": 3.04e18})
 
-    pool.buy(invbtc, alice, {"from": alice, "value": 3e18})
+    pool.mint(invbtc, alice, {"from": alice, "value": 3e18})
 
     pool.updateMaxPoolShare(invbtc, 0)
     assert pool.params(invbtc)[3] == 0
 
-    pool.buy(invbtc, alice, {"from": alice, "value": 1e18})
+    pool.mint(invbtc, alice, {"from": alice, "value": 1e18})
 
     # collect fee
     assert pool.feeAccrued() == 7e16
@@ -446,31 +446,31 @@ def test_owner_methods(
     assert deployer.balance() - balance == 7e16
     assert pool.feeAccrued() == 0
 
-    # pause buy
+    # pause mint
     with reverts("Must be owner or guardian"):
-        pool.updateBuyPaused(cubebtc, True, {"from": alice})
+        pool.updateMintPaused(cubebtc, True, {"from": alice})
 
-    pool.updateBuyPaused(cubebtc, True)
+    pool.updateMintPaused(cubebtc, True)
 
     with reverts("Paused"):
-        pool.buy(cubebtc, alice, {"from": alice, "value": 1e18})
-    pool.buy(invbtc, alice, {"from": alice, "value": 1e18})
+        pool.mint(cubebtc, alice, {"from": alice, "value": 1e18})
+    pool.mint(invbtc, alice, {"from": alice, "value": 1e18})
 
-    pool.updateBuyPaused(cubebtc, False)
-    pool.buy(cubebtc, alice, {"from": alice, "value": 1e18})
+    pool.updateMintPaused(cubebtc, False)
+    pool.mint(cubebtc, alice, {"from": alice, "value": 1e18})
 
-    # pause sell
+    # pause burn
     with reverts("Must be owner or guardian"):
-        pool.updateSellPaused(cubebtc, True, {"from": alice})
+        pool.updateBurnPaused(cubebtc, True, {"from": alice})
 
-    pool.updateSellPaused(cubebtc, True)
+    pool.updateBurnPaused(cubebtc, True)
 
     with reverts("Paused"):
-        pool.sell(cubebtc, 1e18, alice, {"from": alice})
-    pool.sell(invbtc, 1e18, alice, {"from": alice})
+        pool.burn(cubebtc, 1e18, alice, {"from": alice})
+    pool.burn(invbtc, 1e18, alice, {"from": alice})
 
-    pool.updateSellPaused(cubebtc, False)
-    pool.sell(cubebtc, 1e18, alice, {"from": alice})
+    pool.updateBurnPaused(cubebtc, False)
+    pool.burn(cubebtc, 1e18, alice, {"from": alice})
 
     # pause price update
     with reverts("Must be owner or guardian"):
@@ -502,11 +502,11 @@ def test_owner_methods(
     pool.addGuardian(alice)
     assert pool.guardians(alice)
 
-    pool.updateBuyPaused(cubebtc, True, {"from": alice})
-    pool.updateBuyPaused(cubebtc, False, {"from": alice})
+    pool.updateMintPaused(cubebtc, True, {"from": alice})
+    pool.updateMintPaused(cubebtc, False, {"from": alice})
 
-    pool.updateSellPaused(cubebtc, True, {"from": alice})
-    pool.updateSellPaused(cubebtc, False, {"from": alice})
+    pool.updateBurnPaused(cubebtc, True, {"from": alice})
+    pool.updateBurnPaused(cubebtc, False, {"from": alice})
 
     pool.updatePriceUpdatePaused(cubebtc, True, {"from": alice})
     pool.updatePriceUpdatePaused(cubebtc, False, {"from": alice})

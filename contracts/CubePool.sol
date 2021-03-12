@@ -17,19 +17,20 @@ import "./ChainlinkFeedsRegistry.sol";
 import "./CubeToken.sol";
 
 /**
- * @title Leveraged Token Pool
- * @notice A pool that lets users buy and sell leveraged tokens
+ * @title Cube Pool
+ * @notice A pool where users can mint cube tokens by depositing ETH and
+ * burn them to withdraw ETH.
  */
 contract CubePool is Ownable, ReentrancyGuard {
     using Address for address;
     using SafeERC20 for IERC20;
     using SafeMath for uint256;
 
-    event Trade(
+    event MintOrBurn(
         address indexed sender,
         address indexed to,
-        CubeToken cubeToken,
-        bool isBuy,
+        CubeToken indexed cubeToken,
+        bool isMint,
         uint256 quantity,
         uint256 cost
     );
@@ -41,8 +42,8 @@ contract CubePool is Ownable, ReentrancyGuard {
         string underlyingSymbol;
         CubeToken.Side side;
         uint256 maxPoolShare; // expressed in basis points; 0 means no limit
-        bool buyPaused;
-        bool sellPaused;
+        bool mintPaused;
+        bool burnPaused;
         bool priceUpdatePaused;
         uint256 initialPrice;
         uint256 lastPrice;
@@ -50,7 +51,7 @@ contract CubePool is Ownable, ReentrancyGuard {
     }
 
     ChainlinkFeedsRegistry public feedRegistry;
-    CubeToken public lTokenImpl = new CubeToken();
+    CubeToken public cubeTokenImpl = new CubeToken();
 
     mapping(CubeToken => Params) public params;
     mapping(string => mapping(CubeToken.Side => CubeToken)) public cubeTokensMap;
@@ -61,30 +62,35 @@ contract CubePool is Ownable, ReentrancyGuard {
     uint256 public maxTvl; // 0 means no limit
     bool public finalized;
 
+    // total value is always equal to sum of totalSupply * price over all cube tokens
     uint256 public totalValue;
+
+    // pool balance is ETH balance of this contract minus trading fees accrued so far
     uint256 public poolBalance;
 
     /**
-     * @param _feedRegistry The `ChainlinkFeedsRegistry` contract that stores
-     * chainlink feed addresses
+     * @param _feedRegistry The `ChainlinkFeedsRegistry` contract that's used
+     * to fetch underlying prices from chainlink oracles
      */
     constructor(address _feedRegistry) public {
         feedRegistry = ChainlinkFeedsRegistry(_feedRegistry);
 
         // initialize with dummy data so that it can't be initialized again
-        lTokenImpl.initialize(address(0), "", CubeToken.Side.Long);
+        cubeTokenImpl.initialize(address(0), "", CubeToken.Side.Long);
     }
 
     /**
-     * @notice Buy leveraged tokens
-     * @param cubeToken The leveraged token to buy
-     * @param to The address that receives the leveraged tokens
-     * @return cubeTokensOut The amount of base tokens paid
+     * @notice Mint leveraged tokens
+     * @dev ETH has to be sent in when calling this and the corresponding
+     * quantity of cube tokens is calculated.
+     * @param cubeToken The cube token to mint
+     * @param to Address that receives the cube tokens
+     * @return cubeTokensOut Quantity of cube tokens that were minted
      */
-    function buy(CubeToken cubeToken, address to) external payable nonReentrant returns (uint256 cubeTokensOut) {
+    function mint(CubeToken cubeToken, address to) external payable nonReentrant returns (uint256 cubeTokensOut) {
         Params storage _params = params[cubeToken];
         require(_params.added, "Not added");
-        require(!_params.buyPaused, "Paused");
+        require(!_params.mintPaused, "Paused");
 
         uint256 price = updatePrice(cubeToken);
         uint256 ethIn = subtractFee(msg.value);
@@ -94,35 +100,35 @@ contract CubePool is Ownable, ReentrancyGuard {
         totalValue = totalValue.add(cubeTokensOut.mul(price));
         cubeToken.mint(to, cubeTokensOut);
 
-        // `maxPoolShare` being 0 means no limit
+        // don't allow cube token to be minted if its share of the pool is too large
         if (_params.maxPoolShare > 0) {
-            uint256 lTokenValue = cubeToken.totalSupply().mul(price);
-            require(lTokenValue.mul(1e4) <= _params.maxPoolShare.mul(totalValue), "Max pool share exceeded");
+            uint256 value = cubeToken.totalSupply().mul(price);
+            require(value.mul(1e4) <= _params.maxPoolShare.mul(totalValue), "Max pool share exceeded");
         }
 
-        // `maxTvl` being 0 means no limit
+        // cap tvl for guarded launch
         if (maxTvl > 0) {
             require(poolBalance <= maxTvl, "Max TVL exceeded");
         }
 
-        emit Trade(msg.sender, to, cubeToken, true, cubeTokensOut, msg.value);
+        emit MintOrBurn(msg.sender, to, cubeToken, true, cubeTokensOut, msg.value);
     }
 
     /**
-     * @notice Sell leveraged tokens
-     * @param cubeToken The leveraged token to sell
-     * @param cubeTokensIn The quantity of leveraged tokens to sell
-     * @param to The address that receives the sale amount
-     * @return ethOut The amount of base tokens returned
+     * @notice Burn cube tokens
+     * @param cubeToken The cube token to burn
+     * @param cubeTokensIn Quantity of cube tokens to burn
+     * @param to Address that receives the sale amount
+     * @return ethOut Amount of ETH returned to recipient
      */
-    function sell(
+    function burn(
         CubeToken cubeToken,
         uint256 cubeTokensIn,
         address to
     ) external nonReentrant returns (uint256 ethOut) {
         Params storage _params = params[cubeToken];
         require(_params.added, "Not added");
-        require(!_params.sellPaused, "Paused");
+        require(!_params.burnPaused, "Paused");
 
         uint256 price = updatePrice(cubeToken);
         ethOut = getCostFromQuantity(cubeToken, cubeTokensIn);
@@ -134,16 +140,16 @@ contract CubePool is Ownable, ReentrancyGuard {
         ethOut = subtractFee(ethOut);
         payable(to).transfer(ethOut);
 
-        emit Trade(msg.sender, to, cubeToken, false, cubeTokensIn, ethOut);
+        emit MintOrBurn(msg.sender, to, cubeToken, false, cubeTokensIn, ethOut);
     }
 
     /**
-     * @notice Update the stored leveraged token price and total value. It is
-     * automatically called when this leveraged token is bought or sold. However
+     * @notice Update the stored cube token price and total value. It is
+     * automatically called when this cube token is minted or burned. However
      * if it has not been traded for a while, it should be called periodically
      * so that the total value does get too far out of sync
      * @param cubeToken Leveraged token whose price is updated
-     * @return price Updated unnormalized leveraged token price
+     * @return price Updated unnormalized cube token price
      */
     function updatePrice(CubeToken cubeToken) public returns (uint256) {
         Params storage _params = params[cubeToken];
@@ -160,7 +166,7 @@ contract CubePool is Ownable, ReentrancyGuard {
         uint256 cubeOrInv = _params.side == CubeToken.Side.Long ? cube.mul(1e24) : uint256(1e72).div(cube);
         require(cubeOrInv > 0, "Price should be > 0");
 
-        // set initialPrice the first time this method is called for this leveraged token
+        // set initialPrice the first time this method is called for this cube token
         uint256 initialPrice = _params.initialPrice;
         if (initialPrice == 0) {
             initialPrice = _params.initialPrice = cubeOrInv.div(1e18);
@@ -182,17 +188,17 @@ contract CubePool is Ownable, ReentrancyGuard {
     }
 
     /**
-     * @notice Add a new leveraged token. Can only be called by owner
-     * @param underlyingSymbol The ERC-20 whose price is used
+     * @notice Add a new cube token. Can only be called by owner
+     * @param underlyingSymbol Symbol of underlying token. Used to fetch price from oracle
      * @param side Long or short
-     * @return address Address of leveraged token that was added
+     * @return address Address of cube token that was added
      */
     function addCubeToken(string memory underlyingSymbol, CubeToken.Side side) external onlyOwner returns (address) {
         require(side == CubeToken.Side.Short || side == CubeToken.Side.Long, "Invalid side");
         require(address(cubeTokensMap[underlyingSymbol][side]) == address(0), "Already added");
 
         bytes32 salt = keccak256(abi.encodePacked(underlyingSymbol, side));
-        address instance = Clones.cloneDeterministic(address(lTokenImpl), salt);
+        address instance = Clones.cloneDeterministic(address(cubeTokenImpl), salt);
         CubeToken cubeToken = CubeToken(instance);
 
         cubeToken.initialize(address(this), underlyingSymbol, side);
@@ -202,8 +208,8 @@ contract CubePool is Ownable, ReentrancyGuard {
             underlyingSymbol: underlyingSymbol,
             side: side,
             maxPoolShare: 0,
-            buyPaused: false,
-            sellPaused: false,
+            mintPaused: false,
+            burnPaused: false,
             priceUpdatePaused: false,
             initialPrice: 0,
             lastPrice: 0,
@@ -218,9 +224,11 @@ contract CubePool is Ownable, ReentrancyGuard {
     }
 
     /**
-     * @notice Amount received by selling leveraged tokens
-     * @param cubeToken The leveraged token sold
-     * @param cost Quantity of leveraged tokens sold
+     * @notice Quantity of cube tokens minted or burned when sending in or receiving
+     * `cost` amount of ETH
+     * @dev Divide by price and normalize using total value and pool balance
+     * @param cubeToken The cube token minted or burned
+     * @param cost Amount of ETH sent in when minting or received when burning
      */
     function getQuantityFromCost(CubeToken cubeToken, uint256 cost) public view returns (uint256) {
         Params storage _params = params[cubeToken];
@@ -228,9 +236,11 @@ contract CubePool is Ownable, ReentrancyGuard {
     }
 
     /**
-     * @notice Amount received by selling leveraged tokens
-     * @param cubeToken The leveraged token sold
-     * @param quantity Quantity of leveraged tokens sold
+     * @notice Amount of ETH received or sent in when minting or burning `quantity`
+     * amount of cube tokens
+     * @dev Multiply by price and normalize using total value and pool balance
+     * @param cubeToken The cube token minted or burned
+     * @param quantity Quantity of cube tokens minted or burned
      */
     function getCostFromQuantity(CubeToken cubeToken, uint256 quantity) public view returns (uint256) {
         Params storage _params = params[cubeToken];
@@ -238,9 +248,7 @@ contract CubePool is Ownable, ReentrancyGuard {
     }
 
     /**
-     * @notice Amount received by selling leveraged tokens
-     * @dev Rounds down fee
-     * @param amount Eth amount paid or received in trade
+     * @dev Fee is rounded down
      */
     function subtractFee(uint256 amount) public view returns (uint256) {
         return amount.sub(amount.mul(tradingFee).div(1e4));
@@ -250,6 +258,11 @@ contract CubePool is Ownable, ReentrancyGuard {
         return cubeTokens.length;
     }
 
+    /**
+     * @dev Amount of fees accrued so far in terms of ETH. This is the amount
+     * that's withdrawable by the owner. The remaining `poolBalance` is the
+     * total amount of ETH withdrawable by cube token holders.
+     */
     function feeAccrued() public view returns (uint256) {
         return address(this).balance.sub(poolBalance);
     }
@@ -258,16 +271,26 @@ contract CubePool is Ownable, ReentrancyGuard {
         msg.sender.transfer(feeAccrued());
     }
 
+    /**
+     * @notice Update max pool share for token. Expressed in basis points.
+     * Setting to 0 means no limit
+     */
     function updateMaxPoolShare(CubeToken cubeToken, uint256 maxPoolShare) external onlyOwner {
         require(params[cubeToken].added, "Not added");
         require(maxPoolShare < 1e4, "Max pool share should be < 100%");
         params[cubeToken].maxPoolShare = maxPoolShare;
     }
 
+    /**
+     * @notice Update TVL cap for a guarded launch. Setting to 0 means no limit
+     */
     function updateMaxTvl(uint256 _maxTvl) external onlyOwner {
         maxTvl = _maxTvl;
     }
 
+    /**
+     * @notice Update trading fee. Expressed in basis points
+     */
     function updateTradingFee(uint256 _tradingFee) external onlyOwner {
         require(_tradingFee < 1e4, "Trading fee should be < 100%");
         tradingFee = _tradingFee;
@@ -284,16 +307,16 @@ contract CubePool is Ownable, ReentrancyGuard {
         guardians[guardian] = false;
     }
 
-    function updateBuyPaused(CubeToken cubeToken, bool paused) external {
+    function updateMintPaused(CubeToken cubeToken, bool paused) external {
         require(msg.sender == owner() || guardians[msg.sender], "Must be owner or guardian");
         require(params[cubeToken].added, "Not added");
-        params[cubeToken].buyPaused = paused;
+        params[cubeToken].mintPaused = paused;
     }
 
-    function updateSellPaused(CubeToken cubeToken, bool paused) external {
+    function updateBurnPaused(CubeToken cubeToken, bool paused) external {
         require(msg.sender == owner() || guardians[msg.sender], "Must be owner or guardian");
         require(params[cubeToken].added, "Not added");
-        params[cubeToken].sellPaused = paused;
+        params[cubeToken].burnPaused = paused;
     }
 
     function updatePriceUpdatePaused(CubeToken cubeToken, bool paused) external {
@@ -303,15 +326,15 @@ contract CubePool is Ownable, ReentrancyGuard {
     }
 
     function updateAllPaused(
-        bool buyPaused,
-        bool sellPaused,
+        bool mintPaused,
+        bool burnPaused,
         bool priceUpdatePaused
     ) external {
         require(msg.sender == owner() || guardians[msg.sender], "Must be owner or guardian");
         for (uint256 i = 0; i < cubeTokens.length; i = i.add(1)) {
             CubeToken cubeToken = cubeTokens[i];
-            params[cubeToken].buyPaused = buyPaused;
-            params[cubeToken].sellPaused = sellPaused;
+            params[cubeToken].mintPaused = mintPaused;
+            params[cubeToken].burnPaused = burnPaused;
             params[cubeToken].priceUpdatePaused = priceUpdatePaused;
         }
     }

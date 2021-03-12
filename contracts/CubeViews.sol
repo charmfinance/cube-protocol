@@ -13,11 +13,11 @@ contract CubeViews {
     using SafeMath for uint256;
 
     // /**
-    //  * @notice Cost to buy leveraged tokens
+    //  * @notice Cost to mint leveraged tokens
     //  * @param lToken Leveraged token bought
-    //  * @param quantity Quantity of leveraged tokens bought
+    //  * @param quantity Quantity of leveraged tokens minted
     //  */
-    // function buyQuote(
+    // function mintQuote(
     //     CubePool pool,
     //     CubeToken lToken,
     //     uint256 quantity
@@ -27,11 +27,11 @@ contract CubeViews {
     // }
 
     // /**
-    //  * @notice Amount received by selling leveraged tokens
+    //  * @notice Amount received by burning leveraged tokens
     //  * @param lToken Leveraged token sold
-    //  * @param quantity Quantity of leveraged tokens sold
+    //  * @param quantity Quantity of leveraged tokens burned
     //  */
-    // function sellQuote(
+    // function burnQuote(
     //     CubePool pool,
     //     CubeToken lToken,
     //     uint256 quantity
