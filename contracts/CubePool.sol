@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: Unlicense
 
 pragma solidity 0.6.12;
-pragma experimental ABIEncoderV2;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
@@ -254,10 +253,6 @@ contract CubePool is Ownable, ReentrancyGuard {
         return amount.sub(amount.mul(tradingFee).div(1e4));
     }
 
-    function numCubeTokens() external view returns (uint256) {
-        return cubeTokens.length;
-    }
-
     /**
      * @dev Amount of fees accrued so far in terms of ETH. This is the amount
      * that's withdrawable by the owner. The remaining `poolBalance` is the
@@ -347,5 +342,40 @@ contract CubePool is Ownable, ReentrancyGuard {
         require(msg.sender == owner() || guardians[msg.sender], "Must be owner or guardian");
         require(!finalized, "Finalized");
         payable(owner()).transfer(address(this).balance);
+    }
+
+    function numCubeTokens() external view returns (uint256) {
+        return cubeTokens.length;
+    }
+
+    function getParams(CubeToken cubeToken)
+        external
+        view
+        returns (
+            string memory,
+            CubeToken.Side,
+            uint256,
+            uint256,
+            uint256,
+            uint256,
+            bool,
+            bool,
+            bool,
+            bool
+        )
+    {
+        Params memory _params = params[cubeToken];
+        return (
+            _params.underlyingSymbol,
+            _params.side,
+            _params.maxPoolShare,
+            _params.initialPrice,
+            _params.lastPrice,
+            _params.lastUpdated,
+            _params.mintPaused,
+            _params.burnPaused,
+            _params.priceUpdatePaused,
+            _params.added
+        );
     }
 }

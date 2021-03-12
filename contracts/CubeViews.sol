@@ -9,7 +9,7 @@ import "./ChainlinkFeedsRegistry.sol";
 import "./CubePool.sol";
 import "./CubeToken.sol";
 
-contract CubeViews {
+library CubeViews {
     using SafeMath for uint256;
 
     // /**
@@ -43,7 +43,7 @@ contract CubeViews {
     function allPrices(CubePool pool) external view returns (uint256[] memory prices) {
         uint256 n = pool.numCubeTokens();
         prices = new uint256[](n);
-        for (uint256 i = 0; i < n; i++) {
+        for (uint256 i = 0; i < n; i = i.add(1)) {
             prices[i] = pool.getCostFromQuantity(pool.cubeTokens(i), 1e18);
         }
     }
@@ -52,8 +52,8 @@ contract CubeViews {
         ChainlinkFeedsRegistry feedRegistry = ChainlinkFeedsRegistry(pool.feedRegistry());
         uint256 n = pool.numCubeTokens();
         underlyingPrices = new uint256[](n);
-        for (uint256 i = 0; i < n; i++) {
-            string memory symbol = pool.cubeTokens(i).underlyingSymbol();
+        for (uint256 i = 0; i < n; i = i.add(1)) {
+            (string memory symbol, , , , , , , , , ) = pool.getParams(pool.cubeTokens(i));
             underlyingPrices[i] = feedRegistry.getPrice(symbol);
         }
     }
@@ -61,7 +61,7 @@ contract CubeViews {
     function allNames(CubePool pool) external view returns (string[] memory names) {
         uint256 n = pool.numCubeTokens();
         names = new string[](n);
-        for (uint256 i = 0; i < n; i++) {
+        for (uint256 i = 0; i < n; i = i.add(1)) {
             names[i] = CubeToken(pool.cubeTokens(i)).name();
         }
     }
@@ -69,7 +69,7 @@ contract CubeViews {
     function allSymbols(CubePool pool) external view returns (string[] memory symbols) {
         uint256 n = pool.numCubeTokens();
         symbols = new string[](n);
-        for (uint256 i = 0; i < n; i++) {
+        for (uint256 i = 0; i < n; i = i.add(1)) {
             symbols[i] = CubeToken(pool.cubeTokens(i)).symbol();
         }
     }
@@ -77,7 +77,7 @@ contract CubeViews {
     function allTotalSupplies(CubePool pool) external view returns (uint256[] memory totalSupplies) {
         uint256 n = pool.numCubeTokens();
         totalSupplies = new uint256[](n);
-        for (uint256 i = 0; i < n; i++) {
+        for (uint256 i = 0; i < n; i = i.add(1)) {
             totalSupplies[i] = CubeToken(pool.cubeTokens(i)).totalSupply();
         }
     }
@@ -85,21 +85,63 @@ contract CubeViews {
     function allBalances(CubePool pool, address account) external view returns (uint256[] memory balances) {
         uint256 n = pool.numCubeTokens();
         balances = new uint256[](n);
-        for (uint256 i = 0; i < n; i++) {
+        for (uint256 i = 0; i < n; i = i.add(1)) {
             balances[i] = CubeToken(pool.cubeTokens(i)).balanceOf(account);
         }
     }
 
-    // allParams
-
     function allMaxPoolShares(CubePool pool) external view returns (uint256[] memory maxPoolShares) {
         uint256 n = pool.numCubeTokens();
         maxPoolShares = new uint256[](n);
-        for (uint256 i = 0; i < n; i++) {
-            (, , , uint256 maxPoolShare, , , , , , ) = pool.params(pool.cubeTokens(i));
+        for (uint256 i = 0; i < n; i = i.add(1)) {
+            (, , uint256 maxPoolShare, , , , , , , ) = pool.getParams(pool.cubeTokens(i));
             maxPoolShares[i] = maxPoolShare;
         }
     }
+
+    // struct Params {
+    //     string underlyingSymbol;
+    //     CubeToken.Side side;
+    //     uint256 maxPoolShare;
+    //     uint256 initialPrice;
+    //     uint256 lastPrice;
+    //     uint256 lastUpdated;
+    //     bool mintPaused;
+    //     bool burnPaused;
+    //     bool priceUpdatePaused;
+    //     bool added; // always true - used to check existence
+    // }
+
+    // function allParams(CubePool pool) external view returns (Params[] memory params) {
+    //     uint256 n = pool.numCubeTokens();
+    //     params = new Params[](n);
+    //     for (uint256 i = 0; i < n; i = i.add(1)) {
+    //         (
+    //             string memory underlyingSymbol,
+    //             CubeToken.Side side,
+    //             uint256 maxPoolShare,
+    //             uint256 initialPrice,
+    //             uint256 lastPrice,
+    //             uint256 lastUpdated,
+    //             bool mintPaused,
+    //             bool burnPaused,
+    //             bool priceUpdatePaused,
+    //             bool added
+    //         ) = pool.getParams(pool.cubeTokens(i));
+    //         params[i] = Params(
+    //             underlyingSymbol,
+    //             side,
+    //             maxPoolShare,
+    //             initialPrice,
+    //             lastPrice,
+    //             lastUpdated,
+    //             mintPaused,
+    //             burnPaused,
+    //             priceUpdatePaused,
+    //             added
+    //         );
+    //     }
+    // }
 
     // allPrices
 
