@@ -5,6 +5,7 @@ from pytest import approx
 
 
 LONG, SHORT = 0, 1
+MAX_POOL_SHARE_INDEX = 2
 LAST_PRICE_INDEX = 4
 LAST_UPDATED_INDEX = 5
 
@@ -424,8 +425,8 @@ def test_owner_methods(
 
     # update max pool share
     pool.updateMaxPoolShare(invbtc, 5000)  # 50%
-    assert pool.params(cubebtc)[3] == 0
-    assert pool.params(invbtc)[3] == 5000
+    assert pool.params(cubebtc)[MAX_POOL_SHARE_INDEX] == 0
+    assert pool.params(invbtc)[MAX_POOL_SHARE_INDEX] == 5000
 
     with reverts("Max pool share exceeded"):
         pool.mint(invbtc, alice, {"from": alice, "value": 3.04e18})
@@ -433,7 +434,7 @@ def test_owner_methods(
     pool.mint(invbtc, alice, {"from": alice, "value": 3e18})
 
     pool.updateMaxPoolShare(invbtc, 0)
-    assert pool.params(invbtc)[3] == 0
+    assert pool.params(invbtc)[MAX_POOL_SHARE_INDEX] == 0
 
     pool.mint(invbtc, alice, {"from": alice, "value": 1e18})
 
