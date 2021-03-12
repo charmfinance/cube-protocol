@@ -32,9 +32,8 @@ contract CubeToken is ERC20Upgradeable {
         Side _side
     ) external initializer {
         bool long = _side == Side.Long;
-        string memory name =
-            string(abi.encodePacked(_underlyingSymbol, (long ? " Cube Token" : " Inverse Cube Token")));
-        string memory symbol = string(abi.encodePacked((long ? "cube" : "inv"), _underlyingSymbol));
+        string memory name = string(abi.encodePacked("Charm 3X ", long ? "Long " : "Short ", _underlyingSymbol));
+        string memory symbol = string(abi.encodePacked(long ? "cube" : "inv", _underlyingSymbol));
         __ERC20_init(name, symbol);
 
         cubePool = _cubePool;
