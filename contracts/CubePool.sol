@@ -38,16 +38,16 @@ contract CubePool is Ownable, ReentrancyGuard {
     event AddCubeToken(CubeToken cubeToken, string underlyingSymbol, CubeToken.Side side);
 
     struct Params {
-        bool added; // always set to true; used to check existence
         string underlyingSymbol;
         CubeToken.Side side;
-        uint256 maxPoolShare; // expressed in basis points; 0 means no limit
-        bool mintPaused;
-        bool burnPaused;
-        bool priceUpdatePaused;
+        uint256 maxPoolShare;
         uint256 initialPrice;
         uint256 lastPrice;
         uint256 lastUpdated;
+        bool mintPaused;
+        bool burnPaused;
+        bool priceUpdatePaused;
+        bool added; // always true - used to check existence
     }
 
     ChainlinkFeedsRegistry public feedRegistry;

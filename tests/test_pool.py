@@ -5,6 +5,8 @@ from pytest import approx
 
 
 LONG, SHORT = 0, 1
+LAST_PRICE_INDEX = 4
+LAST_UPDATED_INDEX = 5
 
 
 class Sim(object):
@@ -90,16 +92,16 @@ def test_add_lt(
     assert pool.cubeTokens(0) == cubebtc
 
     (
-        added,
         token,
         side,
         maxPoolShare,
-        depositPaused,
-        withdrawPaused,
-        priceUpdatePaused,
         initialPrice,
         lastPrice,
         lastUpdated,
+        depositPaused,
+        withdrawPaused,
+        priceUpdatePaused,
+        added,
     ) = pool.params(cubebtc)
     assert added
     assert token == "BTC"
@@ -128,16 +130,16 @@ def test_add_lt(
     assert pool.cubeTokens(1) == invbtc
 
     (
-        added,
         token,
         side,
         maxPoolShare,
-        depositPaused,
-        withdrawPaused,
-        priceUpdatePaused,
         initialPrice,
         lastPrice,
         lastUpdated,
+        depositPaused,
+        withdrawPaused,
+        priceUpdatePaused,
+        added,
     ) = pool.params(invbtc)
     assert added
     assert token == "BTC"
@@ -220,8 +222,8 @@ def test_mint_and_burn(
     assert approx(pool.balance()) == sim.balance
     assert approx(pool.poolBalance(), rel=1e-3) == sim.poolBalance
     assert approx(pool.totalValue()) == sim.totalValue()
-    assert approx(pool.params(cubebtc)[8]) == 1e18
-    assert approx(pool.params(cubebtc)[9], abs=1) == chain.time()
+    assert approx(pool.params(cubebtc)[LAST_PRICE_INDEX]) == 1e18
+    assert approx(pool.params(cubebtc)[LAST_UPDATED_INDEX], abs=1) == chain.time()
 
     # check events
     (ev,) = tx.events["MintOrBurn"]
@@ -251,8 +253,8 @@ def test_mint_and_burn(
     assert approx(pool.balance()) == sim.balance
     assert approx(pool.poolBalance()) == sim.poolBalance
     assert approx(pool.totalValue()) == sim.totalValue()
-    assert approx(pool.params(invbtc)[8]) == 1e18
-    assert approx(pool.params(invbtc)[9], abs=1) == chain.time()
+    assert approx(pool.params(invbtc)[LAST_PRICE_INDEX]) == 1e18
+    assert approx(pool.params(invbtc)[LAST_UPDATED_INDEX], abs=1) == chain.time()
 
     # check events
     (ev,) = tx.events["MintOrBurn"]
@@ -303,10 +305,10 @@ def test_mint_and_burn(
     assert approx(pool.poolBalance(), rel=1e-4) == sim.poolBalance
     assert approx(pool.totalValue(), rel=1e-4) == sim.totalValue()
     assert (
-        approx(pool.params(cubebtc)[8])
+        approx(pool.params(cubebtc)[LAST_PRICE_INDEX])
         == sim.prices[cubebtc] / sim.initialPrices[cubebtc] * 1e18
     )
-    assert approx(pool.params(cubebtc)[9], abs=1) == chain.time()
+    assert approx(pool.params(cubebtc)[LAST_UPDATED_INDEX], abs=1) == chain.time()
 
     # check events
     (ev,) = tx.events["MintOrBurn"]
@@ -339,10 +341,10 @@ def test_mint_and_burn(
     assert approx(pool.poolBalance()) == 0
     assert approx(pool.totalValue()) == 0
     assert (
-        approx(pool.params(invbtc)[8])
+        approx(pool.params(invbtc)[LAST_PRICE_INDEX])
         == sim.prices[invbtc] / sim.initialPrices[invbtc] * 1e18
     )
-    assert approx(pool.params(invbtc)[9], abs=1) == chain.time()
+    assert approx(pool.params(invbtc)[LAST_UPDATED_INDEX], abs=1) == chain.time()
 
     # check events
     (ev,) = tx.events["MintOrBurn"]
@@ -478,22 +480,22 @@ def test_owner_methods(
 
     pool.updatePriceUpdatePaused(cubebtc, True)
 
-    t = pool.params(cubebtc)[9]
+    t = pool.params(cubebtc)[LAST_UPDATED_INDEX]
     chain.sleep(1)
     pool.updatePrice(cubebtc, {"from": alice})
-    assert pool.params(cubebtc)[9] == t
+    assert pool.params(cubebtc)[LAST_UPDATED_INDEX] == t
 
-    t = pool.params(invbtc)[9]
+    t = pool.params(invbtc)[LAST_UPDATED_INDEX]
     chain.sleep(1)
     pool.updatePrice(invbtc, {"from": alice})
-    assert pool.params(invbtc)[9] > t
+    assert pool.params(invbtc)[LAST_UPDATED_INDEX] > t
 
     pool.updatePriceUpdatePaused(cubebtc, False)
 
-    t = pool.params(cubebtc)[9]
+    t = pool.params(cubebtc)[LAST_UPDATED_INDEX]
     chain.sleep(1)
     pool.updatePrice(cubebtc, {"from": alice})
-    assert pool.params(cubebtc)[9] > t
+    assert pool.params(cubebtc)[LAST_UPDATED_INDEX] > t
 
     # add guardian
     assert not pool.guardians(alice)
