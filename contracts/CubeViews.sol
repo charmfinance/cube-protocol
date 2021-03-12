@@ -92,7 +92,6 @@ contract CubeViews {
 
     // allParams
 
-
     function allMaxPoolShares(CubePool pool) external view returns (uint256[] memory maxPoolShares) {
         uint256 n = pool.numCubeTokens();
         maxPoolShares = new uint256[](n);
@@ -111,47 +110,4 @@ contract CubeViews {
     // allMaxBuyAmounts
 
     // allParams
-
-    // move belwo to periphery
-    // function getLeveragedTokenPrice(address token, Side side) external view returns (uint256) {
-    //     uint256 price = getSquarePrice(cubeToken.token(), cubeToken.side());
-    //     return price.div(totalValue);
-    // }
-
-    // function getLeveragedTokenPrices() external view returns (uint256[] prices) {
-    //     uint256 n = leveragedTokens.length;
-    //     prices = new uint256[n];
-    //     for (uint256 i = 0; i < n; i++) {
-    //         CubeToken cubeToken = leveragedTokens[i];
-    //         prices[i] = getLeveragedTokenPrice(cubeToken.token(), cubeToken.side());
-    //     }
-    // }
-
-    // function getLeveragedTokenValues() public view returns (uint256 values) {
-    //     uint256 n = leveragedTokens.length;
-    //     values = new uint256[n];
-    //     for (uint256 i = 0; i < n; i++) {
-    //         CubeToken cubeToken = leveragedTokens[i];
-    //         values[i] = getLeveragedTokenPrices(cubeToken).mul(cubeToken.totalSupply());
-    //     }
-    // }
-
-    // function getAccountValues(CubeToken cubeToken, address account) external view returns (uint256 values) {
-    //     uint256 n = leveragedTokens.length;
-    //     values = new uint256[n];
-    //     for (uint256 i = 0; i < n; i++) {
-    //         values[i] = getLeveragedTokenPrices(cubeToken).mul(cubeToken.balanceOf(account));
-    //     }
-    // }
-
-    // TODO: splti into 2 methods
-    // function getMaxDepositAmounts() external view returns (uint256[] amounts) {
-    //     uint256 n = leveragedTokens.length;
-    //     amounts = new uint256[n];
-    //     for (uint256 i = 0; i < n; i++) {
-    //         uint256 maxAmount1 = maxTvl.sub(getBalance());
-    //         uint256 maxAmount2 = maxPoolShare.mul(totalValue).sub(getLeveragedTokenValue(cubeToken));
-    //         amounts[i] = Math.min(maxAmount1, maxAmount2);
-    //     }
-    // }
 }

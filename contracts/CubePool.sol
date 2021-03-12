@@ -16,10 +16,6 @@ import "../interfaces/AggregatorV3Interface.sol";
 import "./ChainlinkFeedsRegistry.sol";
 import "./CubeToken.sol";
 
-// TODO
-// - test X/eth
-// - test admin methods
-
 /**
  * @title Leveraged Token Pool
  * @notice A pool that lets users buy and sell leveraged tokens
@@ -54,7 +50,7 @@ contract CubePool is Ownable, ReentrancyGuard {
     }
 
     ChainlinkFeedsRegistry public feedRegistry;
-    CubeToken public lTokenImpl;
+    CubeToken public lTokenImpl = new CubeToken();
 
     mapping(CubeToken => Params) public params;
     mapping(string => mapping(CubeToken.Side => CubeToken)) public cubeTokensMap;
@@ -74,7 +70,6 @@ contract CubePool is Ownable, ReentrancyGuard {
      */
     constructor(address _feedRegistry) public {
         feedRegistry = ChainlinkFeedsRegistry(_feedRegistry);
-        lTokenImpl = new CubeToken();
 
         // initialize with dummy data so that it can't be initialized again
         lTokenImpl.initialize(address(0), "", CubeToken.Side.Long);
@@ -100,10 +95,9 @@ contract CubePool is Ownable, ReentrancyGuard {
         cubeToken.mint(to, cubeTokensOut);
 
         // `maxPoolShare` being 0 means no limit
-        uint256 maxPoolShare = _params.maxPoolShare;
-        if (maxPoolShare > 0) {
+        if (_params.maxPoolShare > 0) {
             uint256 lTokenValue = cubeToken.totalSupply().mul(price);
-            require(lTokenValue.mul(1e4) <= maxPoolShare.mul(totalValue), "Max pool share exceeded");
+            require(lTokenValue.mul(1e4) <= _params.maxPoolShare.mul(totalValue), "Max pool share exceeded");
         }
 
         // `maxTvl` being 0 means no limit
@@ -151,7 +145,7 @@ contract CubePool is Ownable, ReentrancyGuard {
      * @param cubeToken Leveraged token whose price is updated
      * @return price Updated unnormalized leveraged token price
      */
-    function updatePrice(CubeToken cubeToken) public returns (uint256 price) {
+    function updatePrice(CubeToken cubeToken) public returns (uint256) {
         Params storage _params = params[cubeToken];
         require(_params.added, "Not added");
 
@@ -174,14 +168,17 @@ contract CubePool is Ownable, ReentrancyGuard {
 
         // divide by the initial price to avoid extremely high or low prices
         // price decimals is now 18dp
-        price = cubeOrInv.div(initialPrice);
-
+        uint256 price = cubeOrInv.div(initialPrice);
         uint256 _totalSupply = cubeToken.totalSupply();
-        totalValue = totalValue.sub(_totalSupply.mul(_params.lastPrice)).add(_totalSupply.mul(price));
+
+        uint256 valueBefore = _params.lastPrice.mul(_totalSupply);
+        uint256 valueAfter = price.mul(_totalSupply);
+        totalValue = totalValue.add(valueAfter).sub(valueBefore);
+
         _params.lastPrice = price;
         _params.lastUpdated = block.timestamp;
-
         emit UpdatePrice(cubeToken, price);
+        return price;
     }
 
     /**
@@ -227,10 +224,7 @@ contract CubePool is Ownable, ReentrancyGuard {
      */
     function getQuantityFromCost(CubeToken cubeToken, uint256 cost) public view returns (uint256) {
         Params storage _params = params[cubeToken];
-        require(_params.added, "Not added");
-
-        uint256 _poolBalance = poolBalance;
-        return _poolBalance > 0 ? cost.mul(totalValue).div(_params.lastPrice).div(_poolBalance) : cost;
+        return poolBalance > 0 ? cost.mul(totalValue).div(_params.lastPrice).div(poolBalance) : cost;
     }
 
     /**
@@ -240,26 +234,28 @@ contract CubePool is Ownable, ReentrancyGuard {
      */
     function getCostFromQuantity(CubeToken cubeToken, uint256 quantity) public view returns (uint256) {
         Params storage _params = params[cubeToken];
-        require(_params.added, "Not added");
-
-        uint256 _totalValue = totalValue;
-        return _totalValue > 0 ? quantity.mul(_params.lastPrice).mul(poolBalance).div(_totalValue) : quantity;
+        return totalValue > 0 ? quantity.mul(_params.lastPrice).mul(poolBalance).div(totalValue) : quantity;
     }
 
-    function subtractFee(uint256 cost) public view returns (uint256) {
-        return cost.sub(cost.mul(tradingFee).div(1e4));
+    /**
+     * @notice Amount received by selling leveraged tokens
+     * @dev Rounds down fee
+     * @param amount Eth amount paid or received in trade
+     */
+    function subtractFee(uint256 amount) public view returns (uint256) {
+        return amount.sub(amount.mul(tradingFee).div(1e4));
     }
 
     function numCubeTokens() external view returns (uint256) {
         return cubeTokens.length;
     }
 
-    function feesAccrued() public view returns (uint256) {
+    function feeAccrued() public view returns (uint256) {
         return address(this).balance.sub(poolBalance);
     }
 
     function collectFee() external onlyOwner {
-        msg.sender.transfer(feesAccrued());
+        msg.sender.transfer(feeAccrued());
     }
 
     function updateMaxPoolShare(CubeToken cubeToken, uint256 maxPoolShare) external onlyOwner {

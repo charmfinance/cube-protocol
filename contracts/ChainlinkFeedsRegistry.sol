@@ -30,11 +30,16 @@ contract ChainlinkFeedsRegistry is Ownable {
      * @param token ERC20 token whose price we want
      */
     function getPrice(string memory token) external view returns (uint256) {
-        if (usdFeeds[token] != address(0)) {
+        address tokenUsd = usdFeeds[token];
+        if (tokenUsd != address(0)) {
             return _latestPrice(usdFeeds[token]);
-        } else if (ethFeeds[token] != address(0) && usdFeeds["ETH"] != address(0)) {
-            uint256 price1 = _latestPrice(ethFeeds[token]);
-            uint256 price2 = _latestPrice(usdFeeds["ETH"]);
+        }
+
+        address tokenEth = ethFeeds[token];
+        address ethUsd = usdFeeds["ETH"];
+        if (tokenEth != address(0) && ethUsd != address(0)) {
+            uint256 price1 = _latestPrice(tokenEth);
+            uint256 price2 = _latestPrice(ethUsd);
 
             // chainlink usd feeds are multiplied by 1e8 and eth feeds by 1e18 so need to divide by 1e18
             return price1.mul(price2).div(1e18);
