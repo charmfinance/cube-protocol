@@ -25,11 +25,11 @@ contract CubePool is Ownable, ReentrancyGuard {
     using SafeERC20 for IERC20;
     using SafeMath for uint256;
 
-    event MintOrBurn(
+    event DepositOrWithdraw(
         address indexed sender,
         address indexed to,
         CubeToken indexed cubeToken,
-        bool isMint,
+        bool isDeposit,
         uint256 quantity,
         uint256 cost
     );
@@ -43,8 +43,8 @@ contract CubePool is Ownable, ReentrancyGuard {
         uint256 initialPrice;
         uint256 lastPrice;
         uint256 lastUpdated;
-        bool mintPaused;
-        bool burnPaused;
+        bool depositPaused;
+        bool withdrawPaused;
         bool priceUpdatePaused;
         bool added; // always true - used to check existence
     }
@@ -79,17 +79,17 @@ contract CubePool is Ownable, ReentrancyGuard {
     }
 
     /**
-     * @notice Mint leveraged tokens
+     * @notice Deposit ETH and mint leveraged tokens
      * @dev ETH has to be sent in when calling this and the corresponding
      * quantity of cube tokens is calculated.
      * @param cubeToken The cube token to mint
      * @param to Address that receives the cube tokens
      * @return cubeTokensOut Quantity of cube tokens that were minted
      */
-    function mint(CubeToken cubeToken, address to) external payable nonReentrant returns (uint256 cubeTokensOut) {
+    function deposit(CubeToken cubeToken, address to) external payable nonReentrant returns (uint256 cubeTokensOut) {
         Params storage _params = params[cubeToken];
         require(_params.added, "Not added");
-        require(!_params.mintPaused, "Paused");
+        require(!_params.depositPaused, "Paused");
 
         uint256 price = updatePrice(cubeToken);
         uint256 ethIn = subtractFee(msg.value);
@@ -110,24 +110,24 @@ contract CubePool is Ownable, ReentrancyGuard {
             require(poolBalance <= maxTvl, "Max TVL exceeded");
         }
 
-        emit MintOrBurn(msg.sender, to, cubeToken, true, cubeTokensOut, msg.value);
+        emit DepositOrWithdraw(msg.sender, to, cubeToken, true, cubeTokensOut, msg.value);
     }
 
     /**
-     * @notice Burn cube tokens
+     * @notice Withdraw ETH and burn cube tokens
      * @param cubeToken The cube token to burn
      * @param cubeTokensIn Quantity of cube tokens to burn
      * @param to Address that receives the sale amount
      * @return ethOut Amount of ETH returned to recipient
      */
-    function burn(
+    function withdraw(
         CubeToken cubeToken,
         uint256 cubeTokensIn,
         address to
     ) external nonReentrant returns (uint256 ethOut) {
         Params storage _params = params[cubeToken];
         require(_params.added, "Not added");
-        require(!_params.burnPaused, "Paused");
+        require(!_params.withdrawPaused, "Paused");
 
         uint256 price = updatePrice(cubeToken);
         ethOut = getCostFromQuantity(cubeToken, cubeTokensIn);
@@ -139,7 +139,7 @@ contract CubePool is Ownable, ReentrancyGuard {
         ethOut = subtractFee(ethOut);
         payable(to).transfer(ethOut);
 
-        emit MintOrBurn(msg.sender, to, cubeToken, false, cubeTokensIn, ethOut);
+        emit DepositOrWithdraw(msg.sender, to, cubeToken, false, cubeTokensIn, ethOut);
     }
 
     /**
@@ -207,8 +207,8 @@ contract CubePool is Ownable, ReentrancyGuard {
             underlyingSymbol: underlyingSymbol,
             side: side,
             maxPoolShare: 0,
-            mintPaused: false,
-            burnPaused: false,
+            depositPaused: false,
+            withdrawPaused: false,
             priceUpdatePaused: false,
             initialPrice: 0,
             lastPrice: 0,
@@ -302,16 +302,16 @@ contract CubePool is Ownable, ReentrancyGuard {
         guardians[guardian] = false;
     }
 
-    function updateMintPaused(CubeToken cubeToken, bool paused) external {
+    function updateDepositPaused(CubeToken cubeToken, bool paused) external {
         require(msg.sender == owner() || guardians[msg.sender], "Must be owner or guardian");
         require(params[cubeToken].added, "Not added");
-        params[cubeToken].mintPaused = paused;
+        params[cubeToken].depositPaused = paused;
     }
 
-    function updateBurnPaused(CubeToken cubeToken, bool paused) external {
+    function updateWithdrawPaused(CubeToken cubeToken, bool paused) external {
         require(msg.sender == owner() || guardians[msg.sender], "Must be owner or guardian");
         require(params[cubeToken].added, "Not added");
-        params[cubeToken].burnPaused = paused;
+        params[cubeToken].withdrawPaused = paused;
     }
 
     function updatePriceUpdatePaused(CubeToken cubeToken, bool paused) external {
@@ -321,15 +321,15 @@ contract CubePool is Ownable, ReentrancyGuard {
     }
 
     function updateAllPaused(
-        bool mintPaused,
-        bool burnPaused,
+        bool depositPaused,
+        bool withdrawPaused,
         bool priceUpdatePaused
     ) external {
         require(msg.sender == owner() || guardians[msg.sender], "Must be owner or guardian");
         for (uint256 i = 0; i < cubeTokens.length; i = i.add(1)) {
             CubeToken cubeToken = cubeTokens[i];
-            params[cubeToken].mintPaused = mintPaused;
-            params[cubeToken].burnPaused = burnPaused;
+            params[cubeToken].depositPaused = depositPaused;
+            params[cubeToken].withdrawPaused = withdrawPaused;
             params[cubeToken].priceUpdatePaused = priceUpdatePaused;
         }
     }
@@ -372,8 +372,8 @@ contract CubePool is Ownable, ReentrancyGuard {
             _params.initialPrice,
             _params.lastPrice,
             _params.lastUpdated,
-            _params.mintPaused,
-            _params.burnPaused,
+            _params.depositPaused,
+            _params.withdrawPaused,
             _params.priceUpdatePaused,
             _params.added
         );

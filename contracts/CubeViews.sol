@@ -9,7 +9,7 @@ import "./ChainlinkFeedsRegistry.sol";
 import "./CubePool.sol";
 import "./CubeToken.sol";
 
-library CubeViews {
+contract CubeViews {
     using SafeMath for uint256;
 
     // /**
@@ -17,7 +17,7 @@ library CubeViews {
     //  * @param lToken Leveraged token bought
     //  * @param quantity Quantity of leveraged tokens minted
     //  */
-    // function mintQuote(
+    // function depositQuote(
     //     CubePool pool,
     //     CubeToken lToken,
     //     uint256 quantity
@@ -31,7 +31,7 @@ library CubeViews {
     //  * @param lToken Leveraged token sold
     //  * @param quantity Quantity of leveraged tokens burned
     //  */
-    // function burnQuote(
+    // function withdrawQuote(
     //     CubePool pool,
     //     CubeToken lToken,
     //     uint256 quantity
@@ -106,8 +106,8 @@ library CubeViews {
     //     uint256 initialPrice;
     //     uint256 lastPrice;
     //     uint256 lastUpdated;
-    //     bool mintPaused;
-    //     bool burnPaused;
+    //     bool depositPaused;
+    //     bool withdrawPaused;
     //     bool priceUpdatePaused;
     //     bool added; // always true - used to check existence
     // }
@@ -123,8 +123,8 @@ library CubeViews {
     //             uint256 initialPrice,
     //             uint256 lastPrice,
     //             uint256 lastUpdated,
-    //             bool mintPaused,
-    //             bool burnPaused,
+    //             bool depositPaused,
+    //             bool withdrawPaused,
     //             bool priceUpdatePaused,
     //             bool added
     //         ) = pool.getParams(pool.cubeTokens(i));
@@ -135,8 +135,8 @@ library CubeViews {
     //             initialPrice,
     //             lastPrice,
     //             lastUpdated,
-    //             mintPaused,
-    //             burnPaused,
+    //             depositPaused,
+    //             withdrawPaused,
     //             priceUpdatePaused,
     //             added
     //         );
