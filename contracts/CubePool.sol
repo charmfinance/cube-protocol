@@ -348,34 +348,45 @@ contract CubePool is Ownable, ReentrancyGuard {
         return cubeTokens.length;
     }
 
-    function getParams(CubeToken cubeToken)
+    function allCubeTokens() external view returns (CubeToken[] memory _cubeTokens) {
+        _cubeTokens = new CubeToken[](cubeTokens.length);
+        for (uint256 i = 0; i < cubeTokens.length; i = i.add(1)) {
+            _cubeTokens[i] = cubeTokens[i];
+        }
+    }
+
+    function getCubeTokenInfo(CubeToken cubeToken)
         external
         view
         returns (
-            string memory,
-            CubeToken.Side,
-            uint256,
-            uint256,
-            uint256,
-            uint256,
-            bool,
-            bool,
-            bool,
-            bool
+            string memory name,
+            string memory symbol,
+            uint256 totalSupply,
+            uint256 price,
+            uint256 underlyingPrice,
+            CubeToken.Side side,
+            uint256 maxPoolShare,
+            uint256 lastPrice,
+            uint256 lastUpdated,
+            bool depositPaused,
+            bool withdrawPaused,
+            bool priceUpdatePaused
         )
     {
+        name = cubeToken.name();
+        symbol = cubeToken.symbol();
+        totalSupply = cubeToken.totalSupply();
+
         Params memory _params = params[cubeToken];
-        return (
-            _params.underlyingSymbol,
-            _params.side,
-            _params.maxPoolShare,
-            _params.initialPrice,
-            _params.lastPrice,
-            _params.lastUpdated,
-            _params.depositPaused,
-            _params.withdrawPaused,
-            _params.priceUpdatePaused,
-            _params.added
-        );
+        price = getCostFromQuantity(cubeToken, 1e18);
+        underlyingPrice = feedRegistry.getPrice(_params.underlyingSymbol);
+
+        side = _params.side;
+        maxPoolShare = _params.maxPoolShare;
+        lastPrice = _params.lastPrice;
+        lastUpdated = _params.lastUpdated;
+        depositPaused = _params.depositPaused;
+        withdrawPaused = _params.withdrawPaused;
+        priceUpdatePaused = _params.priceUpdatePaused;
     }
 }
