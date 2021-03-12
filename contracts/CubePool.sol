@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Unlicense
 
-pragma solidity 0.6.11;
+pragma solidity 0.6.12;
+pragma experimental ABIEncoderV2;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
@@ -52,8 +53,8 @@ contract CubePool is Ownable, ReentrancyGuard {
         uint256 lastUpdated;
     }
 
-    ChainlinkFeedsRegistry feedRegistry;
-    CubeToken lTokenImpl;
+    ChainlinkFeedsRegistry public feedRegistry;
+    CubeToken public lTokenImpl;
 
     mapping(CubeToken => Params) public params;
     mapping(string => mapping(CubeToken.Side => CubeToken)) public cubeTokensMap;

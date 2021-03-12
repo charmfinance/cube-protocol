@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: Unlicense
 
-pragma solidity 0.6.11;
+pragma solidity 0.6.12;
 pragma experimental ABIEncoderV2;
 
 import "@openzeppelin/contracts/math/SafeMath.sol";
 
-import "./CubeToken.sol";
+import "./ChainlinkFeedsRegistry.sol";
 import "./CubePool.sol";
+import "./CubeToken.sol";
 
 contract CubeViews {
     using SafeMath for uint256;
@@ -39,13 +40,23 @@ contract CubeViews {
     //     return cost.sub(pool.fee(cost));
     // }
 
-    // function allPrices(CubePool pool) external view returns (uint256[] memory prices) {
-    //     uint256 n = pool.numCubeTokens();
-    //     prices = new uint256[](n);
-    //     for (uint256 i = 0; i < n; i++) {
-    //         prices[i] = pool.quote(pool.cubeTokens(i), 1e18);
-    //     }
-    // }
+    function allPrices(CubePool pool) external view returns (uint256[] memory prices) {
+        uint256 n = pool.numCubeTokens();
+        prices = new uint256[](n);
+        for (uint256 i = 0; i < n; i++) {
+            prices[i] = pool.getCostFromQuantity(pool.cubeTokens(i), 1e18);
+        }
+    }
+
+    function allUnderlyingPrices(CubePool pool) external view returns (uint256[] memory underlyingPrices) {
+        ChainlinkFeedsRegistry feedRegistry = ChainlinkFeedsRegistry(pool.feedRegistry());
+        uint256 n = pool.numCubeTokens();
+        underlyingPrices = new uint256[](n);
+        for (uint256 i = 0; i < n; i++) {
+            string memory symbol = pool.cubeTokens(i).underlyingSymbol();
+            underlyingPrices[i] = feedRegistry.getPrice(symbol);
+        }
+    }
 
     function allNames(CubePool pool) external view returns (string[] memory names) {
         uint256 n = pool.numCubeTokens();
@@ -76,6 +87,18 @@ contract CubeViews {
         balances = new uint256[](n);
         for (uint256 i = 0; i < n; i++) {
             balances[i] = CubeToken(pool.cubeTokens(i)).balanceOf(account);
+        }
+    }
+
+    // allParams
+
+
+    function allMaxPoolShares(CubePool pool) external view returns (uint256[] memory maxPoolShares) {
+        uint256 n = pool.numCubeTokens();
+        maxPoolShares = new uint256[](n);
+        for (uint256 i = 0; i < n; i++) {
+            (, , , uint256 maxPoolShare, , , , , , ) = pool.params(pool.cubeTokens(i));
+            maxPoolShares[i] = maxPoolShare;
         }
     }
 

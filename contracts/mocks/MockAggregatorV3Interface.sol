@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Unlicense
 
-pragma solidity 0.6.11;
+pragma solidity 0.6.12;
 
 import "../../interfaces/AggregatorV3Interface.sol";
 
