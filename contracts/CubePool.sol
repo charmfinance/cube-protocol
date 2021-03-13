@@ -249,13 +249,10 @@ contract CubePool is Ownable, ReentrancyGuard {
     function getSpotCubed(CubeToken cubeToken) public view returns (uint256 out) {
         Params storage _params = params[cubeToken];
         uint256 spot = feedRegistry.getPrice(_params.spotSymbol);
+        uint256 spot3 = spot.mul(spot).mul(spot);
 
-        // spot price is multiplied by 1e8. This method returns price multiplied by 1e48
-        if (_params.inverse) {
-            return uint256(1e72).div(spot).div(spot).div(spot); // spot price ^ -3
-        } else {
-            return spot.mul(spot).mul(spot).mul(1e24); // spot price ^ 3
-        }
+        // returns price multiplied by 1e48
+        return _params.inverse ? uint256(1e72).div(spot3) : spot3.mul(1e24);
     }
 
     function subtractFee(uint256 amount) public view returns (uint256) {
@@ -312,22 +309,17 @@ contract CubePool is Ownable, ReentrancyGuard {
         guardians[guardian] = false;
     }
 
-    function setDepositPaused(CubeToken cubeToken, bool paused) external {
+    function setPaused(
+        CubeToken cubeToken,
+        bool depositPaused,
+        bool withdrawPaused,
+        bool priceUpdatePaused
+    ) external {
         require(msg.sender == owner() || guardians[msg.sender], "Must be owner or guardian");
         require(params[cubeToken].added, "Not added");
-        params[cubeToken].depositPaused = paused;
-    }
-
-    function setWithdrawPaused(CubeToken cubeToken, bool paused) external {
-        require(msg.sender == owner() || guardians[msg.sender], "Must be owner or guardian");
-        require(params[cubeToken].added, "Not added");
-        params[cubeToken].withdrawPaused = paused;
-    }
-
-    function setPriceUpdatePaused(CubeToken cubeToken, bool paused) external {
-        require(msg.sender == owner() || guardians[msg.sender], "Must be owner or guardian");
-        require(params[cubeToken].added, "Not added");
-        params[cubeToken].priceUpdatePaused = paused;
+        params[cubeToken].depositPaused = depositPaused;
+        params[cubeToken].withdrawPaused = withdrawPaused;
+        params[cubeToken].priceUpdatePaused = priceUpdatePaused;
     }
 
     function setAllPaused(

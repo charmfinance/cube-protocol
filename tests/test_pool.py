@@ -451,35 +451,35 @@ def test_owner_methods(
 
     # pause deposit
     with reverts("Must be owner or guardian"):
-        pool.setDepositPaused(cubebtc, True, {"from": alice})
+        pool.setPaused(cubebtc, True, False, False, {"from": alice})
 
-    pool.setDepositPaused(cubebtc, True)
+    pool.setPaused(cubebtc, True, False, False)
 
     with reverts("Paused"):
         pool.deposit(cubebtc, alice, {"from": alice, "value": 1e18})
     pool.deposit(invbtc, alice, {"from": alice, "value": 1e18})
 
-    pool.setDepositPaused(cubebtc, False)
+    pool.setPaused(cubebtc, False, False, False)
     pool.deposit(cubebtc, alice, {"from": alice, "value": 1e18})
 
     # pause withdraw
     with reverts("Must be owner or guardian"):
-        pool.setWithdrawPaused(cubebtc, True, {"from": alice})
+        pool.setPaused(cubebtc, False, True, False, {"from": alice})
 
-    pool.setWithdrawPaused(cubebtc, True)
+    pool.setPaused(cubebtc, False, True, False)
 
     with reverts("Paused"):
         pool.withdraw(cubebtc, 1e18, alice, {"from": alice})
     pool.withdraw(invbtc, 1e18, alice, {"from": alice})
 
-    pool.setWithdrawPaused(cubebtc, False)
+    pool.setPaused(cubebtc, False, False, False)
     pool.withdraw(cubebtc, 1e18, alice, {"from": alice})
 
     # pause price set
     with reverts("Must be owner or guardian"):
-        pool.setPriceUpdatePaused(cubebtc, True, {"from": alice})
+        pool.setPaused(cubebtc, False, False, True, {"from": alice})
 
-    pool.setPriceUpdatePaused(cubebtc, True)
+    pool.setPaused(cubebtc, False, False, True)
 
     t = pool.params(cubebtc)[LAST_UPDATED_INDEX]
     chain.sleep(1)
@@ -491,7 +491,7 @@ def test_owner_methods(
     pool.updatePrice(invbtc, {"from": alice})
     assert pool.params(invbtc)[LAST_UPDATED_INDEX] > t
 
-    pool.setPriceUpdatePaused(cubebtc, False)
+    pool.setPaused(cubebtc, False, False, False)
 
     t = pool.params(cubebtc)[LAST_UPDATED_INDEX]
     chain.sleep(1)
@@ -505,14 +505,8 @@ def test_owner_methods(
     pool.addGuardian(alice)
     assert pool.guardians(alice)
 
-    pool.setDepositPaused(cubebtc, True, {"from": alice})
-    pool.setDepositPaused(cubebtc, False, {"from": alice})
-
-    pool.setWithdrawPaused(cubebtc, True, {"from": alice})
-    pool.setWithdrawPaused(cubebtc, False, {"from": alice})
-
-    pool.setPriceUpdatePaused(cubebtc, True, {"from": alice})
-    pool.setPriceUpdatePaused(cubebtc, False, {"from": alice})
+    pool.setPaused(cubebtc, True, True, True, {"from": alice})
+    pool.setPaused(cubebtc, False, False, False, {"from": alice})
 
     # remove guardian
     with reverts("Must be owner or the guardian itself"):
