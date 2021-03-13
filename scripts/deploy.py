@@ -16,6 +16,7 @@ def main():
     feeds.addUsdFeed("SNX", "0xE96C4407597CD507002dF88ff6E0008AB41266Ee")
 
     pool = deployer.deploy(CubePool, feeds, publish_source=True)
+    pool.setTradingFee(100)  # 1%
 
     pool.addCubeToken("BTC", 0)
     pool.addCubeToken("BTC", 1)

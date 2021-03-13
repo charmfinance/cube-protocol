@@ -201,7 +201,7 @@ def test_deposit_and_withdraw(
 
     assert feedsRegistry.getPrice("BTC") == px1 * 1e8
 
-    pool.updateTradingFee(100)  # 1%
+    pool.setTradingFee(100)  # 1%
 
     sim = Sim()
     sim.prices[cubebtc] = px1 ** 3
@@ -390,27 +390,27 @@ def test_owner_methods(
     tx = pool.addCubeToken("BTC", SHORT)
     invbtc = CubeToken.at(tx.return_value)
 
-    # update trading fee
+    # set trading fee
     with reverts("Ownable: caller is not the owner"):
-        pool.updateTradingFee(100, {"from": alice})
+        pool.setTradingFee(100, {"from": alice})
 
-    pool.updateTradingFee(100)  # 1%
+    pool.setTradingFee(100)  # 1%
     assert pool.tradingFee() == 100
 
-    pool.updateTradingFee(0)
+    pool.setTradingFee(0)
     assert pool.tradingFee() == 0
 
-    pool.updateTradingFee(100)  # 1%
+    pool.setTradingFee(100)  # 1%
     assert pool.tradingFee() == 100
 
     with reverts("Trading fee should be < 100%"):
-        pool.updateTradingFee(1e4)
+        pool.setTradingFee(1e4)
 
-    # update max tvl
+    # set max tvl
     with reverts("Ownable: caller is not the owner"):
-        pool.updateMaxTvl(1e18, {"from": alice})
+        pool.setMaxTvl(1e18, {"from": alice})
 
-    pool.updateMaxTvl(2e18)
+    pool.setMaxTvl(2e18)
     assert pool.maxTvl() == 2e18
 
     with reverts("Max TVL exceeded"):
@@ -418,13 +418,13 @@ def test_owner_methods(
 
     pool.deposit(cubebtc, alice, {"from": alice, "value": 2e18})
 
-    pool.updateMaxTvl(0)
+    pool.setMaxTvl(0)
     assert pool.maxTvl() == 0
 
     pool.deposit(cubebtc, alice, {"from": alice, "value": 1e18})
 
-    # update max pool share
-    pool.updateMaxPoolShare(invbtc, 5000)  # 50%
+    # set max pool share
+    pool.setMaxPoolShare(invbtc, 5000)  # 50%
     assert pool.params(cubebtc)[MAX_POOL_SHARE_INDEX] == 0
     assert pool.params(invbtc)[MAX_POOL_SHARE_INDEX] == 5000
 
@@ -433,7 +433,7 @@ def test_owner_methods(
 
     pool.deposit(invbtc, alice, {"from": alice, "value": 3e18})
 
-    pool.updateMaxPoolShare(invbtc, 0)
+    pool.setMaxPoolShare(invbtc, 0)
     assert pool.params(invbtc)[MAX_POOL_SHARE_INDEX] == 0
 
     pool.deposit(invbtc, alice, {"from": alice, "value": 1e18})
@@ -451,35 +451,35 @@ def test_owner_methods(
 
     # pause deposit
     with reverts("Must be owner or guardian"):
-        pool.updateDepositPaused(cubebtc, True, {"from": alice})
+        pool.setDepositPaused(cubebtc, True, {"from": alice})
 
-    pool.updateDepositPaused(cubebtc, True)
+    pool.setDepositPaused(cubebtc, True)
 
     with reverts("Paused"):
         pool.deposit(cubebtc, alice, {"from": alice, "value": 1e18})
     pool.deposit(invbtc, alice, {"from": alice, "value": 1e18})
 
-    pool.updateDepositPaused(cubebtc, False)
+    pool.setDepositPaused(cubebtc, False)
     pool.deposit(cubebtc, alice, {"from": alice, "value": 1e18})
 
     # pause withdraw
     with reverts("Must be owner or guardian"):
-        pool.updateWithdrawPaused(cubebtc, True, {"from": alice})
+        pool.setWithdrawPaused(cubebtc, True, {"from": alice})
 
-    pool.updateWithdrawPaused(cubebtc, True)
+    pool.setWithdrawPaused(cubebtc, True)
 
     with reverts("Paused"):
         pool.withdraw(cubebtc, 1e18, alice, {"from": alice})
     pool.withdraw(invbtc, 1e18, alice, {"from": alice})
 
-    pool.updateWithdrawPaused(cubebtc, False)
+    pool.setWithdrawPaused(cubebtc, False)
     pool.withdraw(cubebtc, 1e18, alice, {"from": alice})
 
-    # pause price update
+    # pause price set
     with reverts("Must be owner or guardian"):
-        pool.updatePriceUpdatePaused(cubebtc, True, {"from": alice})
+        pool.setPriceUpdatePaused(cubebtc, True, {"from": alice})
 
-    pool.updatePriceUpdatePaused(cubebtc, True)
+    pool.setPriceUpdatePaused(cubebtc, True)
 
     t = pool.params(cubebtc)[LAST_UPDATED_INDEX]
     chain.sleep(1)
@@ -491,7 +491,7 @@ def test_owner_methods(
     pool.updatePrice(invbtc, {"from": alice})
     assert pool.params(invbtc)[LAST_UPDATED_INDEX] > t
 
-    pool.updatePriceUpdatePaused(cubebtc, False)
+    pool.setPriceUpdatePaused(cubebtc, False)
 
     t = pool.params(cubebtc)[LAST_UPDATED_INDEX]
     chain.sleep(1)
@@ -505,14 +505,14 @@ def test_owner_methods(
     pool.addGuardian(alice)
     assert pool.guardians(alice)
 
-    pool.updateDepositPaused(cubebtc, True, {"from": alice})
-    pool.updateDepositPaused(cubebtc, False, {"from": alice})
+    pool.setDepositPaused(cubebtc, True, {"from": alice})
+    pool.setDepositPaused(cubebtc, False, {"from": alice})
 
-    pool.updateWithdrawPaused(cubebtc, True, {"from": alice})
-    pool.updateWithdrawPaused(cubebtc, False, {"from": alice})
+    pool.setWithdrawPaused(cubebtc, True, {"from": alice})
+    pool.setWithdrawPaused(cubebtc, False, {"from": alice})
 
-    pool.updatePriceUpdatePaused(cubebtc, True, {"from": alice})
-    pool.updatePriceUpdatePaused(cubebtc, False, {"from": alice})
+    pool.setPriceUpdatePaused(cubebtc, True, {"from": alice})
+    pool.setPriceUpdatePaused(cubebtc, False, {"from": alice})
 
     # remove guardian
     with reverts("Must be owner or the guardian itself"):

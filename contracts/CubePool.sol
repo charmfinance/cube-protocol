@@ -280,7 +280,7 @@ contract CubePool is Ownable, ReentrancyGuard {
      * @notice Update max pool share for token. Expressed in basis points.
      * Setting to 0 means no limit
      */
-    function updateMaxPoolShare(CubeToken cubeToken, uint256 maxPoolShare) external onlyOwner {
+    function setMaxPoolShare(CubeToken cubeToken, uint256 maxPoolShare) external onlyOwner {
         require(params[cubeToken].added, "Not added");
         require(maxPoolShare < 1e4, "Max pool share should be < 100%");
         params[cubeToken].maxPoolShare = maxPoolShare;
@@ -289,14 +289,14 @@ contract CubePool is Ownable, ReentrancyGuard {
     /**
      * @notice Update TVL cap for a guarded launch. Setting to 0 means no limit
      */
-    function updateMaxTvl(uint256 _maxTvl) external onlyOwner {
+    function setMaxTvl(uint256 _maxTvl) external onlyOwner {
         maxTvl = _maxTvl;
     }
 
     /**
      * @notice Update trading fee. Expressed in basis points
      */
-    function updateTradingFee(uint256 _tradingFee) external onlyOwner {
+    function setTradingFee(uint256 _tradingFee) external onlyOwner {
         require(_tradingFee < 1e4, "Trading fee should be < 100%");
         tradingFee = _tradingFee;
     }
@@ -312,25 +312,25 @@ contract CubePool is Ownable, ReentrancyGuard {
         guardians[guardian] = false;
     }
 
-    function updateDepositPaused(CubeToken cubeToken, bool paused) external {
+    function setDepositPaused(CubeToken cubeToken, bool paused) external {
         require(msg.sender == owner() || guardians[msg.sender], "Must be owner or guardian");
         require(params[cubeToken].added, "Not added");
         params[cubeToken].depositPaused = paused;
     }
 
-    function updateWithdrawPaused(CubeToken cubeToken, bool paused) external {
+    function setWithdrawPaused(CubeToken cubeToken, bool paused) external {
         require(msg.sender == owner() || guardians[msg.sender], "Must be owner or guardian");
         require(params[cubeToken].added, "Not added");
         params[cubeToken].withdrawPaused = paused;
     }
 
-    function updatePriceUpdatePaused(CubeToken cubeToken, bool paused) external {
+    function setPriceUpdatePaused(CubeToken cubeToken, bool paused) external {
         require(msg.sender == owner() || guardians[msg.sender], "Must be owner or guardian");
         require(params[cubeToken].added, "Not added");
         params[cubeToken].priceUpdatePaused = paused;
     }
 
-    function updateAllPaused(
+    function setAllPaused(
         bool depositPaused,
         bool withdrawPaused,
         bool priceUpdatePaused
