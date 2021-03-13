@@ -186,6 +186,15 @@ contract CubePool is Ownable, ReentrancyGuard {
         return price;
     }
 
+    function updateAllPrices(uint256 maxStaleTime) public {
+        for (uint256 i = 0; i < cubeTokens.length; i = i.add(1)) {
+            CubeToken cubeToken = cubeTokens[i];
+            if (params[cubeToken].lastUpdated.add(maxStaleTime) < block.timestamp) {
+                updatePrice(cubeToken);
+            }
+        }
+    }
+
     /**
      * @notice Add a new cube token. Can only be called by owner
      * @param underlyingSymbol Symbol of underlying token. Used to fetch price from oracle
