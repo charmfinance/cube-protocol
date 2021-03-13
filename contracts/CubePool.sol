@@ -93,7 +93,7 @@ contract CubePool is Ownable, ReentrancyGuard {
 
         uint256 price = updatePrice(cubeToken);
         uint256 ethIn = subtractFee(msg.value);
-        cubeTokensOut = getQuantityFromCost(price, ethIn);
+        cubeTokensOut = poolBalance > 0 ? ethIn.mul(totalValue).div(price).div(poolBalance) : ethIn;
 
         poolBalance = poolBalance.add(ethIn);
         totalValue = totalValue.add(cubeTokensOut.mul(price));
@@ -130,7 +130,7 @@ contract CubePool is Ownable, ReentrancyGuard {
         require(!_params.withdrawPaused, "Paused");
 
         uint256 price = updatePrice(cubeToken);
-        ethOut = getCostFromQuantity(price, cubeTokensIn);
+        ethOut = totalValue > 0 ? price.mul(cubeTokensIn).mul(poolBalance).div(totalValue) : cubeTokensIn;
 
         poolBalance = poolBalance.sub(ethOut);
         totalValue = totalValue.sub(cubeTokensIn.mul(price));
@@ -159,15 +159,12 @@ contract CubePool is Ownable, ReentrancyGuard {
             return _params.lastPrice;
         }
 
-        uint256 price = getSpotCubed(cubeToken).div(_params.initialPrice);
-        uint256 _totalSupply = cubeToken.totalSupply();
-
-        uint256 valueBefore = _params.lastPrice.mul(_totalSupply);
-        uint256 valueAfter = price.mul(_totalSupply);
-        totalValue = totalValue.add(valueAfter).sub(valueBefore);
+        (uint256 price, uint256 _totalValue) = _getPriceAndTotalValue(cubeToken);
+        totalValue = _totalValue;
 
         _params.lastPrice = price;
         _params.lastUpdated = block.timestamp;
+
         emit UpdatePrice(cubeToken, price);
         return price;
     }
@@ -175,7 +172,7 @@ contract CubePool is Ownable, ReentrancyGuard {
     function updateAllPrices(uint256 maxStaleTime) public {
         for (uint256 i = 0; i < cubeTokens.length; i = i.add(1)) {
             CubeToken cubeToken = cubeTokens[i];
-            if (params[cubeToken].lastUpdated.add(maxStaleTime) < block.timestamp) {
+            if (params[cubeToken].lastUpdated.add(maxStaleTime) <= block.timestamp) {
                 updatePrice(cubeToken);
             }
         }
@@ -220,39 +217,49 @@ contract CubePool is Ownable, ReentrancyGuard {
         return instance;
     }
 
-    /**
-     * @notice Quantity of cube tokens minted or burned when sending in or receiving
-     * `cost` amount of ETH
-     * @dev Divide by price and normalize using total value and pool balance
-     * @param cost Amount of ETH sent in when minting or received when burning
-     */
-    function getQuantityFromCost(uint256 price, uint256 cost) public view returns (uint256) {
-        return poolBalance > 0 ? cost.mul(totalValue).div(price).div(poolBalance) : cost;
-    }
+    // /**
+    //  * @notice Quantity of cube tokens minted or burned when sending in or receiving
+    //  * `cost` amount of ETH
+    //  * @dev Divide by price and normalize using total value and pool balance
+    //  * @param cost Amount of ETH sent in when minting or received when burning
+    //  */
+    // function getQuantityFromCost(uint256 price, uint256 cost) public view returns (uint256) {
+    //     return poolBalance > 0 ? cost.mul(totalValue).div(price).div(poolBalance) : cost;
+    // }
 
-    /**
-     * @notice Amount of ETH received or sent in when minting or burning `quantity`
-     * amount of cube tokens
-     * @dev Multiply by price and normalize using total value and pool balance
-     * @param quantity Quantity of cube tokens minted or burned
-     */
-    function getCostFromQuantity(uint256 price, uint256 quantity) public view returns (uint256) {
-        return totalValue > 0 ? quantity.mul(price).mul(poolBalance).div(totalValue) : quantity;
-    }
+    // /**
+    //  * @notice Amount of ETH received or sent in when minting or burning `quantity`
+    //  * amount of cube tokens
+    //  * @dev Multiply by price and normalize using total value and pool balance
+    //  * @param quantity Quantity of cube tokens minted or burned
+    //  */
+    // function getCostFromQuantity(uint256 price, uint256 quantity) public view returns (uint256) {
+    //     return totalValue > 0 ? price.mul(quantity).mul(poolBalance).div(totalValue) : quantity;
+    // }
 
-    function getCubeTokenPrice(CubeToken cubeToken) public view returns (uint256) {
+    function quote(CubeToken cubeToken, uint256 quantity) public view returns (uint256) {
         Params storage _params = params[cubeToken];
-        uint256 price = getSpotCubed(cubeToken).div(_params.initialPrice);
-        return getCostFromQuantity(price, 1e18);
+        (uint256 price, uint256 _totalValue) = _getPriceAndTotalValue(cubeToken);
+        return _totalValue > 0 ? price.mul(quantity).mul(poolBalance).div(_totalValue) : quantity;
     }
 
-    function getSpotCubed(CubeToken cubeToken) public view returns (uint256 out) {
+    function getSpotCubed(CubeToken cubeToken) public view returns (uint256) {
         Params storage _params = params[cubeToken];
         uint256 spot = feedRegistry.getPrice(_params.spotSymbol);
         uint256 spot3 = spot.mul(spot).mul(spot);
 
         // returns price multiplied by 1e48
         return _params.inverse ? uint256(1e72).div(spot3) : spot3.mul(1e24);
+    }
+
+    function _getPriceAndTotalValue(CubeToken cubeToken) internal view returns (uint256 price, uint256 _totalValue) {
+        Params storage _params = params[cubeToken];
+        price = getSpotCubed(cubeToken).div(_params.initialPrice);
+
+        uint256 _totalSupply = cubeToken.totalSupply();
+        uint256 valueBefore = _params.lastPrice.mul(_totalSupply);
+        uint256 valueAfter = price.mul(_totalSupply);
+        _totalValue = totalValue.add(valueAfter).sub(valueBefore);
     }
 
     function subtractFee(uint256 amount) public view returns (uint256) {
@@ -378,7 +385,7 @@ contract CubePool is Ownable, ReentrancyGuard {
         name = cubeToken.name();
         symbol = cubeToken.symbol();
         totalSupply = cubeToken.totalSupply();
-        price = getCubeTokenPrice(cubeToken);
+        price = quote(cubeToken, 1e18);
 
         Params memory _params = params[cubeToken];
         underlyingPrice = feedRegistry.getPrice(_params.spotSymbol);
