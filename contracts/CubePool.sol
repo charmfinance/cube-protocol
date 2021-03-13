@@ -93,7 +93,7 @@ contract CubePool is Ownable, ReentrancyGuard {
 
         uint256 price = updatePrice(cubeToken);
         uint256 ethIn = subtractFee(msg.value);
-        cubeTokensOut = getQuantityFromCost(cubeToken, ethIn);
+        cubeTokensOut = getQuantityFromCost(price, ethIn);
 
         poolBalance = poolBalance.add(ethIn);
         totalValue = totalValue.add(cubeTokensOut.mul(price));
@@ -130,7 +130,7 @@ contract CubePool is Ownable, ReentrancyGuard {
         require(!_params.withdrawPaused, "Paused");
 
         uint256 price = updatePrice(cubeToken);
-        ethOut = getCostFromQuantity(cubeToken, cubeTokensIn);
+        ethOut = getCostFromQuantity(price, cubeTokensIn);
 
         poolBalance = poolBalance.sub(ethOut);
         totalValue = totalValue.sub(cubeTokensIn.mul(price));
@@ -154,26 +154,12 @@ contract CubePool is Ownable, ReentrancyGuard {
         Params storage _params = params[cubeToken];
         require(_params.added, "Not added");
 
+        // don't update if paused
         if (_params.priceUpdatePaused) {
             return _params.lastPrice;
         }
 
-        uint256 spot = feedRegistry.getPrice(_params.underlyingSymbol);
-        uint256 cube = spot.mul(spot).mul(spot);
-
-        // invert price for short tokens and convert to 48dp
-        uint256 cubeOrInv = _params.side == CubeToken.Side.Long ? cube.mul(1e24) : uint256(1e72).div(cube);
-        require(cubeOrInv > 0, "Price should be > 0");
-
-        // set initialPrice the first time this method is called for this cube token
-        uint256 initialPrice = _params.initialPrice;
-        if (initialPrice == 0) {
-            initialPrice = _params.initialPrice = cubeOrInv.div(1e18);
-        }
-
-        // divide by the initial price to avoid extremely high or low prices
-        // price decimals is now 18dp
-        uint256 price = cubeOrInv.div(initialPrice);
+        uint256 price = getSpotCubed(cubeToken).div(_params.initialPrice);
         uint256 _totalSupply = cubeToken.totalSupply();
 
         uint256 valueBefore = _params.lastPrice.mul(_totalSupply);
@@ -226,6 +212,10 @@ contract CubePool is Ownable, ReentrancyGuard {
         cubeTokensMap[underlyingSymbol][side] = cubeToken;
         cubeTokens.push(cubeToken);
 
+        uint256 initialPrice = getSpotCubed(cubeToken).div(1e18);
+        params[cubeToken].initialPrice = initialPrice;
+        require(initialPrice > 0, "Price should be > 0");
+
         updatePrice(cubeToken);
         emit AddCubeToken(cubeToken, underlyingSymbol, side);
         return instance;
@@ -235,31 +225,43 @@ contract CubePool is Ownable, ReentrancyGuard {
      * @notice Quantity of cube tokens minted or burned when sending in or receiving
      * `cost` amount of ETH
      * @dev Divide by price and normalize using total value and pool balance
-     * @param cubeToken The cube token minted or burned
      * @param cost Amount of ETH sent in when minting or received when burning
      */
-    function getQuantityFromCost(CubeToken cubeToken, uint256 cost) public view returns (uint256) {
-        Params storage _params = params[cubeToken];
-        return poolBalance > 0 ? cost.mul(totalValue).div(_params.lastPrice).div(poolBalance) : cost;
+    function getQuantityFromCost(uint256 price, uint256 cost) public view returns (uint256) {
+        return poolBalance > 0 ? cost.mul(totalValue).div(price).div(poolBalance) : cost;
     }
 
     /**
      * @notice Amount of ETH received or sent in when minting or burning `quantity`
      * amount of cube tokens
      * @dev Multiply by price and normalize using total value and pool balance
-     * @param cubeToken The cube token minted or burned
      * @param quantity Quantity of cube tokens minted or burned
      */
-    function getCostFromQuantity(CubeToken cubeToken, uint256 quantity) public view returns (uint256) {
-        Params storage _params = params[cubeToken];
-        return totalValue > 0 ? quantity.mul(_params.lastPrice).mul(poolBalance).div(totalValue) : quantity;
+    function getCostFromQuantity(uint256 price, uint256 quantity) public view returns (uint256) {
+        return totalValue > 0 ? quantity.mul(price).mul(poolBalance).div(totalValue) : quantity;
     }
 
-    /**
-     * @dev Fee is rounded down
-     */
+    function getCubeTokenPrice(CubeToken cubeToken) public view returns (uint256) {
+        Params storage _params = params[cubeToken];
+        uint256 price = getSpotCubed(cubeToken).div(_params.initialPrice);
+        return getCostFromQuantity(price, 1e18);
+    }
+
+    function getSpotCubed(CubeToken cubeToken) public view returns (uint256 out) {
+        Params storage _params = params[cubeToken];
+        uint256 spot = feedRegistry.getPrice(_params.underlyingSymbol);
+
+        // spot price is multiplied by 1e8. This method returns price multiplied by 1e48
+        if (_params.side == CubeToken.Side.Long) {
+            return spot.mul(spot).mul(spot).mul(1e24); // spot price ^ 3
+        } else {
+            return uint256(1e72).div(spot).div(spot).div(spot); // spot price ^ -3
+        }
+    }
+
     function subtractFee(uint256 amount) public view returns (uint256) {
-        return amount.sub(amount.mul(tradingFee).div(1e4));
+        uint256 fee = amount.mul(tradingFee).div(1e4); // round down fee
+        return amount.sub(fee);
     }
 
     /**
@@ -385,9 +387,9 @@ contract CubePool is Ownable, ReentrancyGuard {
         name = cubeToken.name();
         symbol = cubeToken.symbol();
         totalSupply = cubeToken.totalSupply();
+        price = getCubeTokenPrice(cubeToken);
 
         Params memory _params = params[cubeToken];
-        price = getCostFromQuantity(cubeToken, 1e18);
         underlyingPrice = feedRegistry.getPrice(_params.underlyingSymbol);
 
         side = _params.side;
