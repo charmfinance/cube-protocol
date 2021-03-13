@@ -34,10 +34,10 @@ contract CubePool is Ownable, ReentrancyGuard {
         uint256 cost
     );
     event UpdatePrice(CubeToken cubeToken, uint256 price);
-    event AddCubeToken(CubeToken cubeToken, string underlyingSymbol, bool inverse);
+    event AddCubeToken(CubeToken cubeToken, string spotSymbol, bool inverse);
 
     struct Params {
-        string underlyingSymbol;
+        string spotSymbol;
         bool inverse;
         uint256 maxPoolShare;
         uint256 initialPrice;
@@ -183,22 +183,22 @@ contract CubePool is Ownable, ReentrancyGuard {
 
     /**
      * @notice Add a new cube token. Can only be called by owner
-     * @param underlyingSymbol Symbol of underlying token. Used to fetch price from oracle
+     * @param spotSymbol Symbol of underlying token. Used to fetch price from oracle
      * @param inverse Long or short
      * @return address Address of cube token that was added
      */
-    function addCubeToken(string memory underlyingSymbol, bool inverse) external onlyOwner returns (address) {
-        require(address(cubeTokensMap[underlyingSymbol][inverse]) == address(0), "Already added");
+    function addCubeToken(string memory spotSymbol, bool inverse) external onlyOwner returns (address) {
+        require(address(cubeTokensMap[spotSymbol][inverse]) == address(0), "Already added");
 
-        bytes32 salt = keccak256(abi.encodePacked(underlyingSymbol, inverse));
+        bytes32 salt = keccak256(abi.encodePacked(spotSymbol, inverse));
         address instance = Clones.cloneDeterministic(address(cubeTokenImpl), salt);
         CubeToken cubeToken = CubeToken(instance);
 
-        cubeToken.initialize(address(this), underlyingSymbol, inverse);
+        cubeToken.initialize(address(this), spotSymbol, inverse);
 
         params[cubeToken] = Params({
             added: true,
-            underlyingSymbol: underlyingSymbol,
+            spotSymbol: spotSymbol,
             inverse: inverse,
             maxPoolShare: 0,
             depositPaused: false,
@@ -208,7 +208,7 @@ contract CubePool is Ownable, ReentrancyGuard {
             lastPrice: 0,
             lastUpdated: 0
         });
-        cubeTokensMap[underlyingSymbol][inverse] = cubeToken;
+        cubeTokensMap[spotSymbol][inverse] = cubeToken;
         cubeTokens.push(cubeToken);
 
         uint256 initialPrice = getSpotCubed(cubeToken).div(1e18);
@@ -216,7 +216,7 @@ contract CubePool is Ownable, ReentrancyGuard {
         require(initialPrice > 0, "Price should be > 0");
 
         updatePrice(cubeToken);
-        emit AddCubeToken(cubeToken, underlyingSymbol, inverse);
+        emit AddCubeToken(cubeToken, spotSymbol, inverse);
         return instance;
     }
 
@@ -248,7 +248,7 @@ contract CubePool is Ownable, ReentrancyGuard {
 
     function getSpotCubed(CubeToken cubeToken) public view returns (uint256 out) {
         Params storage _params = params[cubeToken];
-        uint256 spot = feedRegistry.getPrice(_params.underlyingSymbol);
+        uint256 spot = feedRegistry.getPrice(_params.spotSymbol);
 
         // spot price is multiplied by 1e8. This method returns price multiplied by 1e48
         if (_params.inverse) {
@@ -389,7 +389,7 @@ contract CubePool is Ownable, ReentrancyGuard {
         price = getCubeTokenPrice(cubeToken);
 
         Params memory _params = params[cubeToken];
-        underlyingPrice = feedRegistry.getPrice(_params.underlyingSymbol);
+        underlyingPrice = feedRegistry.getPrice(_params.spotSymbol);
 
         inverse = _params.inverse;
         maxPoolShare = _params.maxPoolShare;

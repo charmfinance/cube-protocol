@@ -118,7 +118,7 @@ def test_add_lt(
     # check event
     (ev,) = tx.events["AddCubeToken"]
     assert ev["cubeToken"] == cubebtc
-    assert ev["underlyingSymbol"] == "BTC"
+    assert ev["spotSymbol"] == "BTC"
     assert ev["inverse"] == LONG
 
     # add bear token
@@ -156,7 +156,7 @@ def test_add_lt(
     # check event
     (ev,) = tx.events["AddCubeToken"]
     assert ev["cubeToken"] == invbtc
-    assert ev["underlyingSymbol"] == "BTC"
+    assert ev["spotSymbol"] == "BTC"
     assert ev["inverse"] == SHORT
 
     assert pool.numCubeTokens() == 2

@@ -15,26 +15,26 @@ import "@openzeppelin-upgradeable/contracts/token/ERC20/ERC20Upgradeable.sol";
  */
 contract CubeToken is ERC20Upgradeable {
     address public cubePool;
-    string public underlyingSymbol;
+    string public spotSymbol;
     bool public inverse;
 
     /**
      * @dev Initialize the contract. Should be called exactly once immediately after deployment
      * @param _cubePool The `CubePool` contract that deployed this contract
-     * @param _underlyingSymbol Symbol of underying ERC20 token
+     * @param _spotSymbol Symbol of underying ERC20 token
      * @param _inverse Whether long or short
      */
     function initialize(
         address _cubePool,
-        string memory _underlyingSymbol,
+        string memory _spotSymbol,
         bool _inverse
     ) external initializer {
-        string memory name = string(abi.encodePacked("Charm 3X ", _inverse ? "Short " : "Long " , _underlyingSymbol));
-        string memory symbol = string(abi.encodePacked(_inverse ? "inv" : "cube", _underlyingSymbol));
+        string memory name = string(abi.encodePacked("Charm 3X ", _inverse ? "Short " : "Long ", _spotSymbol));
+        string memory symbol = string(abi.encodePacked(_inverse ? "inv" : "cube", _spotSymbol));
         __ERC20_init(name, symbol);
 
         cubePool = _cubePool;
-        underlyingSymbol = _underlyingSymbol;
+        spotSymbol = _spotSymbol;
         inverse = _inverse;
     }
 
