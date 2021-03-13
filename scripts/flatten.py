@@ -1,8 +1,8 @@
-from brownie import CubeViews
+from brownie import CubePool
 
 
 def main():
-    source = CubeViews.get_verification_info()["flattened_source"]
+    source = CubePool.get_verification_info()["flattened_source"]
 
     with open("flat.sol", "w") as f:
         f.write(source)

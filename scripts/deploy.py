@@ -2,7 +2,6 @@ from brownie import (
     accounts,
     ChainlinkFeedsRegistry,
     CubePool,
-    CubeViews,
     MockToken,
 )
 
@@ -23,9 +22,5 @@ def main():
     pool.addCubeToken("SNX", 0)
     pool.addCubeToken("SNX", 1)
 
-    views = deployer.deploy(CubeViews, publish_source=True)
-
     print(f"Pool address: {pool.address}")
-    print(f"Views address: {views.address}")
-
     print(f"Gas used in deployment: {(balance - deployer.balance()) / 1e18:.4f} ETH")
