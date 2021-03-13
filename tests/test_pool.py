@@ -4,7 +4,7 @@ import pytest
 from pytest import approx
 
 
-LONG, SHORT = 0, 1
+LONG, SHORT = False, True
 MAX_POOL_SHARE_INDEX = 2
 LAST_PRICE_INDEX = 4
 LAST_UPDATED_INDEX = 5
@@ -94,7 +94,7 @@ def test_add_lt(
 
     (
         token,
-        side,
+        inverse,
         maxPoolShare,
         initialPrice,
         lastPrice,
@@ -106,7 +106,7 @@ def test_add_lt(
     ) = pool.params(cubebtc)
     assert added
     assert token == "BTC"
-    assert side == LONG
+    assert inverse == LONG
     assert maxPoolShare == 0
     assert not depositPaused
     assert not withdrawPaused
@@ -119,7 +119,7 @@ def test_add_lt(
     (ev,) = tx.events["AddCubeToken"]
     assert ev["cubeToken"] == cubebtc
     assert ev["underlyingSymbol"] == "BTC"
-    assert ev["side"] == LONG
+    assert ev["inverse"] == LONG
 
     # add bear token
     tx = pool.addCubeToken("BTC", SHORT)
@@ -132,7 +132,7 @@ def test_add_lt(
 
     (
         token,
-        side,
+        inverse,
         maxPoolShare,
         initialPrice,
         lastPrice,
@@ -144,7 +144,7 @@ def test_add_lt(
     ) = pool.params(invbtc)
     assert added
     assert token == "BTC"
-    assert side == SHORT
+    assert inverse == SHORT
     assert maxPoolShare == 0
     assert not depositPaused
     assert not withdrawPaused
@@ -157,7 +157,7 @@ def test_add_lt(
     (ev,) = tx.events["AddCubeToken"]
     assert ev["cubeToken"] == invbtc
     assert ev["underlyingSymbol"] == "BTC"
-    assert ev["side"] == SHORT
+    assert ev["inverse"] == SHORT
 
     assert pool.numCubeTokens() == 2
     assert pool.cubeTokens(0) == cubebtc
