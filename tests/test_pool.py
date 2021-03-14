@@ -233,7 +233,7 @@ def test_deposit_and_withdraw(
     assert ev["cubeToken"] == cubebtc
     assert ev["isDeposit"]
     assert approx(ev["quantity"]) == qty * 1e18
-    assert approx(ev["cost"]) == cost
+    assert approx(ev["ethAmount"]) == cost
     (ev,) = tx.events["UpdatePrice"]
     assert ev["cubeToken"] == cubebtc
     assert (
@@ -264,7 +264,7 @@ def test_deposit_and_withdraw(
     assert ev["cubeToken"] == invbtc
     assert ev["isDeposit"]
     assert approx(ev["quantity"]) == qty * 1e18
-    assert approx(ev["cost"]) == cost
+    assert approx(ev["ethAmount"]) == cost
     (ev,) = tx.events["UpdatePrice"]
     assert ev["cubeToken"] == invbtc
     assert approx(ev["price"]) == sim.prices[invbtc] / sim.initialPrices[invbtc] * 1e18
@@ -277,14 +277,14 @@ def test_deposit_and_withdraw(
     assert approx(pool.totalValue()) == sim.totalValue()
 
     # update btc bull price
-    pool.updatePrice(cubebtc)
+    pool.updatePriceAndTotalValue(cubebtc)
     sim.prices[cubebtc] = px2 ** 3
     assert approx(pool.balance()) == sim.balance
     assert approx(pool.poolBalance()) == sim.poolBalance
     assert approx(pool.totalValue()) == sim.totalValue()
 
     # update btc bear price
-    pool.updatePrice(invbtc)
+    pool.updatePriceAndTotalValue(invbtc)
     sim.prices[invbtc] = px2 ** -3
     assert approx(pool.balance()) == sim.balance
     assert approx(pool.poolBalance()) == sim.poolBalance
@@ -318,7 +318,7 @@ def test_deposit_and_withdraw(
     assert ev["cubeToken"] == cubebtc
     assert not ev["isDeposit"]
     assert approx(ev["quantity"]) == quantity
-    assert approx(ev["cost"], rel=1e-4) == cost
+    assert approx(ev["ethAmount"], rel=1e-4) == cost
 
     (ev,) = tx.events["UpdatePrice"]
     assert ev["cubeToken"] == cubebtc
@@ -354,7 +354,7 @@ def test_deposit_and_withdraw(
     assert ev["cubeToken"] == invbtc
     assert not ev["isDeposit"]
     assert approx(ev["quantity"]) == quantity
-    assert approx(ev["cost"], rel=1e-4) == cost
+    assert approx(ev["ethAmount"], rel=1e-4) == cost
     (ev,) = tx.events["UpdatePrice"]
     assert ev["cubeToken"] == invbtc
     assert approx(ev["price"]) == sim.prices[invbtc] / sim.initialPrices[invbtc] * 1e18
@@ -483,19 +483,19 @@ def test_owner_methods(
 
     t = pool.params(cubebtc)[LAST_UPDATED_INDEX]
     chain.sleep(1)
-    pool.updatePrice(cubebtc, {"from": alice})
+    pool.updatePriceAndTotalValue(cubebtc, {"from": alice})
     assert pool.params(cubebtc)[LAST_UPDATED_INDEX] == t
 
     t = pool.params(invbtc)[LAST_UPDATED_INDEX]
     chain.sleep(1)
-    pool.updatePrice(invbtc, {"from": alice})
+    pool.updatePriceAndTotalValue(invbtc, {"from": alice})
     assert pool.params(invbtc)[LAST_UPDATED_INDEX] > t
 
     pool.setPaused(cubebtc, False, False, False)
 
     t = pool.params(cubebtc)[LAST_UPDATED_INDEX]
     chain.sleep(1)
-    pool.updatePrice(cubebtc, {"from": alice})
+    pool.updatePriceAndTotalValue(cubebtc, {"from": alice})
     assert pool.params(cubebtc)[LAST_UPDATED_INDEX] > t
 
     # add guardian
