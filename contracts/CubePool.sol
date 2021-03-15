@@ -43,7 +43,7 @@ contract CubePool is Ownable, ReentrancyGuard {
         string spotSymbol;
         bool inverse;
         uint256 maxPoolShare;
-        uint256 initialPrice;
+        uint256 initialSpotPrice;
         uint256 lastPrice;
         uint256 lastUpdated;
         bool depositPaused;
@@ -94,7 +94,9 @@ contract CubePool is Ownable, ReentrancyGuard {
         require(_params.added, "Not added");
         require(!_params.depositPaused, "Paused");
 
-        (uint256 price, uint256 _totalValue) = update(cubeToken);
+        (uint256 price, uint256 _totalValue) = _updatedPriceAndTotalValue(cubeToken);
+        _updatePrice(cubeToken, price);
+
         uint256 ethIn = _subtractFee(msg.value);
         cubeTokensOut = _getDepositAmount(price, _totalValue, ethIn);
 
@@ -132,7 +134,8 @@ contract CubePool is Ownable, ReentrancyGuard {
         require(_params.added, "Not added");
         require(!_params.withdrawPaused, "Paused");
 
-        (uint256 price, uint256 _totalValue) = update(cubeToken);
+        (uint256 price, uint256 _totalValue) = _updatedPriceAndTotalValue(cubeToken);
+        _updatePrice(cubeToken, price);
         ethOut = _getWithdrawAmount(price, _totalValue, cubeTokensIn);
 
         poolBalance = poolBalance.sub(ethOut);
@@ -151,22 +154,25 @@ contract CubePool is Ownable, ReentrancyGuard {
      * if it has not been traded for a while, it should be called periodically
      * so that the total value does get too far out of sync
      * @param cubeToken Cube token whose price is updated
-     * @return price Updated cube token price
      */
-    function update(CubeToken cubeToken) public returns (uint256 price, uint256 _totalValue) {
+    function update(CubeToken cubeToken) public {
         Params storage _params = params[cubeToken];
         require(_params.added, "Not added");
 
         // don't update if paused
         if (_params.updatePaused) {
-            return (_params.lastPrice, totalValue);
+            return;
         }
 
-        price = _normCubeOrInv(cubeToken);
-        totalValue = _totalValue = _updatedTotalValue(cubeToken, price);
+        (uint256 price, uint256 _totalValue) = _updatedPriceAndTotalValue(cubeToken);
+        _updatePrice(cubeToken, price);
+        totalValue = _totalValue;
+    }
+
+    function _updatePrice(CubeToken cubeToken, uint256 price) internal {
+        Params storage _params = params[cubeToken];
         _params.lastPrice = price;
         _params.lastUpdated = block.timestamp;
-
         emit Update(cubeToken, price);
     }
 
@@ -201,17 +207,18 @@ contract CubePool is Ownable, ReentrancyGuard {
             depositPaused: false,
             withdrawPaused: false,
             updatePaused: false,
-            initialPrice: 0,
+            initialSpotPrice: 0,
             lastPrice: 0,
             lastUpdated: 0
         });
         cubeTokensMap[spotSymbol][inverse] = cubeToken;
         cubeTokens.push(cubeToken);
 
-        uint256 initialPrice = _cubeOrInv(cubeToken).div(1e18);
-        require(initialPrice > 0, "Price should be > 0");
+        // uint256 initialSpotPrice = _cubeOrInv(cubeToken).div(1e18);
+        uint256 initialSpotPrice = feedRegistry.getPrice(spotSymbol);
+        require(initialSpotPrice > 0, "Price should be > 0");
 
-        params[cubeToken].initialPrice = initialPrice;
+        params[cubeToken].initialSpotPrice = initialSpotPrice;
         update(cubeToken);
 
         emit AddCubeToken(cubeToken, spotSymbol, inverse);
@@ -219,15 +226,13 @@ contract CubePool is Ownable, ReentrancyGuard {
     }
 
     function quote(CubeToken cubeToken, uint256 quantity) public view returns (uint256) {
-        uint256 price = _normCubeOrInv(cubeToken);
-        uint256 _totalValue = _updatedTotalValue(cubeToken, price);
+        (uint256 price, uint256 _totalValue) = _updatedPriceAndTotalValue(cubeToken);
         return _getWithdrawAmount(price, _totalValue, quantity);
     }
 
     function quoteDeposit(CubeToken cubeToken, uint256 ethIn) external view returns (uint256) {
         uint256 amountIn = _subtractFee(ethIn);
-        uint256 price = _normCubeOrInv(cubeToken);
-        uint256 _totalValue = _updatedTotalValue(cubeToken, price);
+        (uint256 price, uint256 _totalValue) = _updatedPriceAndTotalValue(cubeToken);
         return _getDepositAmount(price, _totalValue, amountIn);
     }
 
@@ -239,32 +244,30 @@ contract CubePool is Ownable, ReentrancyGuard {
         return cubeTokens.length;
     }
 
-    function _updatedTotalValue(CubeToken cubeToken, uint256 price) internal view returns (uint256) {
+    function _updatedPriceAndTotalValue(CubeToken cubeToken)
+        internal
+        view
+        returns (uint256 price, uint256 _totalValue)
+    {
         Params storage _params = params[cubeToken];
+        if (_params.updatePaused) {
+            return (_params.lastPrice, totalValue);
+        }
+
+        uint256 spot = feedRegistry.getPrice(_params.spotSymbol);
+        spot = spot.mul(1e6).div(_params.initialSpotPrice);
+        if (_params.inverse) {
+            // 1 / spot ^ 3
+            price = uint256(1e36).div(spot).div(spot).div(spot);
+        } else {
+            // spot ^ 3
+            price = spot.mul(spot).mul(spot);
+        }
+
         uint256 _totalSupply = cubeToken.totalSupply();
         uint256 valueBefore = _params.lastPrice.mul(_totalSupply);
         uint256 valueAfter = price.mul(_totalSupply);
-        return totalValue.add(valueAfter).sub(valueBefore);
-    }
-
-    function _normCubeOrInv(CubeToken cubeToken) internal view returns (uint256) {
-        Params storage _params = params[cubeToken];
-        if (_params.updatePaused) {
-            return _params.lastPrice;
-        }
-        return _cubeOrInv(cubeToken).div(params[cubeToken].initialPrice);
-    }
-
-    function _cubeOrInv(CubeToken cubeToken) internal view returns (uint256) {
-        Params storage _params = params[cubeToken];
-        uint256 spot = feedRegistry.getPrice(_params.spotSymbol);
-        if (_params.inverse) {
-            // 1 / spot ^ 3
-            return uint256(1e72).div(spot).div(spot).div(spot);
-        } else {
-            // spot ^ 3
-            return spot.mul(spot).mul(spot).mul(1e24);
-        }
+        _totalValue = totalValue.add(valueAfter).sub(valueBefore);
     }
 
     /// @notice eth amount = (quantity x price x pool balance) / total value

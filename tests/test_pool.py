@@ -96,7 +96,7 @@ def test_add_lt(
         token,
         inverse,
         maxPoolShare,
-        initialPrice,
+        initialSpotPrice,
         lastPrice,
         lastUpdated,
         depositPaused,
@@ -111,7 +111,7 @@ def test_add_lt(
     assert not depositPaused
     assert not withdrawPaused
     assert not updatePaused
-    assert approx(initialPrice) == 50000 ** 3 * 1e30
+    assert approx(initialSpotPrice) == 50000 * 1e8
     assert lastPrice == 1e18
     assert approx(lastUpdated, abs=1) == chain.time()
 
@@ -134,7 +134,7 @@ def test_add_lt(
         token,
         inverse,
         maxPoolShare,
-        initialPrice,
+        initialSpotPrice,
         lastPrice,
         lastUpdated,
         depositPaused,
@@ -149,7 +149,7 @@ def test_add_lt(
     assert not depositPaused
     assert not withdrawPaused
     assert not updatePaused
-    assert approx(initialPrice) == 50000 ** -3 * 1e30
+    assert approx(initialSpotPrice) == 50000 * 1e8
     assert lastPrice == 1e18
     assert approx(lastUpdated, abs=1) == chain.time()
 
@@ -509,4 +509,3 @@ def test_owner_methods(
 
     pool.setPaused(cubebtc, True, True, True, {"from": alice})
     pool.setPaused(cubebtc, False, False, False, {"from": alice})
-
