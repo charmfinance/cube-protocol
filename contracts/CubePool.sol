@@ -392,46 +392,4 @@ contract CubePool is Ownable, ReentrancyGuard {
         require(!finalized, "Finalized");
         payable(owner()).transfer(address(this).balance);
     }
-
-    function allCubeTokens() external view returns (CubeToken[] memory _cubeTokens) {
-        _cubeTokens = new CubeToken[](cubeTokens.length);
-        for (uint256 i = 0; i < cubeTokens.length; i = i.add(1)) {
-            _cubeTokens[i] = cubeTokens[i];
-        }
-    }
-
-    function getCubeTokenInfo(CubeToken cubeToken)
-        external
-        view
-        returns (
-            string memory name,
-            string memory symbol,
-            uint256 totalSupply,
-            uint256 price,
-            uint256 underlyingPrice,
-            bool inverse,
-            uint256 maxPoolShare,
-            uint256 lastPrice,
-            uint256 lastUpdated,
-            bool depositPaused,
-            bool withdrawPaused,
-            bool updatePaused
-        )
-    {
-        name = cubeToken.name();
-        symbol = cubeToken.symbol();
-        totalSupply = cubeToken.totalSupply();
-        price = quote(cubeToken, 1e18);
-
-        Params memory _params = params[cubeToken];
-        underlyingPrice = feedRegistry.getPrice(_params.spotSymbol);
-
-        inverse = _params.inverse;
-        maxPoolShare = _params.maxPoolShare;
-        lastPrice = _params.lastPrice;
-        lastUpdated = _params.lastUpdated;
-        depositPaused = _params.depositPaused;
-        withdrawPaused = _params.withdrawPaused;
-        updatePaused = _params.updatePaused;
-    }
 }
