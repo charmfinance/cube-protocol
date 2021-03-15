@@ -70,7 +70,7 @@ def test_add_lt(
     with reverts("Ownable: caller is not the owner"):
         pool.addCubeToken("BTC", LONG, {"from": alice})
 
-    with reverts("Price should be > 0"):
+    with reverts("Spot price should be > 0"):
         pool.addCubeToken("BTC", LONG)
 
     btcusd = deployer.deploy(MockAggregatorV3Interface)
@@ -79,7 +79,7 @@ def test_add_lt(
     assert feedsRegistry.getPrice("BTC") == 50000 * 1e8
 
     btcusd.setPrice(0)
-    with reverts("Price should be > 0"):
+    with reverts("Spot price should be > 0"):
         pool.addCubeToken("BTC", LONG)
 
     # add bull token
