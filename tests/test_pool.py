@@ -227,6 +227,8 @@ def test_deposit_and_withdraw(
     assert approx(pool.totalValue()) == sim.totalValue()
     assert approx(pool.params(cubebtc)[LAST_PRICE_INDEX]) == 1e18
     assert approx(pool.params(cubebtc)[LAST_UPDATED_INDEX], abs=1) == chain.time()
+    update_time = chain.time()
+    chain.sleep(1)
 
     # check events
     (ev,) = tx.events["DepositOrWithdraw"]
@@ -242,6 +244,15 @@ def test_deposit_and_withdraw(
     assert (
         approx(ev["price"]) == sim.prices[cubebtc] / sim.initialPrices[cubebtc] * 1e18
     )
+
+    # pause price updates and change oracle price, which shouldn't be reflected
+    # until later
+    pool.setPaused(invbtc, False, False, True)
+    btcusd.setPrice(px2 * 1e8)
+    assert feedsRegistry.getPrice("BTC") == px2 * 1e8
+    assert approx(pool.balance()) == sim.balance
+    assert approx(pool.poolBalance()) == sim.poolBalance
+    assert approx(pool.totalValue()) == sim.totalValue()
 
     # check btc bear token price
     cost = sim.deposit(invbtc, qty)
@@ -260,7 +271,11 @@ def test_deposit_and_withdraw(
     assert approx(pool.poolBalance()) == sim.poolBalance
     assert approx(pool.totalValue()) == sim.totalValue()
     assert approx(pool.params(invbtc)[LAST_PRICE_INDEX]) == 1e18
-    assert approx(pool.params(invbtc)[LAST_UPDATED_INDEX], abs=1) == chain.time()
+    assert (
+        approx(pool.params(invbtc)[LAST_UPDATED_INDEX], abs=1)
+        == update_time
+        < chain.time()
+    )
 
     # check events
     (ev,) = tx.events["DepositOrWithdraw"]
@@ -271,16 +286,14 @@ def test_deposit_and_withdraw(
     assert approx(ev["quantity"]) == qty * 1e18
     assert approx(ev["ethAmount"]) == cost
 
-    (ev,) = tx.events["Update"]
-    assert ev["cubeToken"] == invbtc
-    assert approx(ev["price"]) == sim.prices[invbtc] / sim.initialPrices[invbtc] * 1e18
+    assert "Update" not in tx.events
 
-    # change oracle price
-    btcusd.setPrice(px2 * 1e8)
-    assert feedsRegistry.getPrice("BTC") == px2 * 1e8
-    assert approx(pool.balance()) == sim.balance
-    assert approx(pool.poolBalance()) == sim.poolBalance
-    assert approx(pool.totalValue()) == sim.totalValue()
+    # (ev,) = tx.events["Update"]
+    # assert ev["cubeToken"] == invbtc
+    # assert approx(ev["price"]) == sim.prices[invbtc] / sim.initialPrices[invbtc] * 1e18
+
+    # unpause price updates
+    pool.setPaused(invbtc, False, False, False)
 
     # update btc bull price
     pool.update(cubebtc)
@@ -312,7 +325,10 @@ def test_deposit_and_withdraw(
     assert approx(pool.balance()) == sim.balance
     assert approx(pool.poolBalance(), rel=1e-3) == sim.poolBalance
     assert approx(pool.totalValue()) == sim.totalValue()
-    assert approx(pool.params(cubebtc)[LAST_PRICE_INDEX]) == sim.prices[cubebtc] / sim.initialPrices[cubebtc] * 1e18
+    assert (
+        approx(pool.params(cubebtc)[LAST_PRICE_INDEX])
+        == sim.prices[cubebtc] / sim.initialPrices[cubebtc] * 1e18
+    )
     assert approx(pool.params(cubebtc)[LAST_UPDATED_INDEX], abs=1) == chain.time()
 
     # check events
