@@ -501,22 +501,12 @@ def test_owner_methods(
     assert pool.params(cubebtc)[LAST_UPDATED_INDEX] > t
 
     # add guardian
-    assert not pool.guardians(alice)
+    assert pool.guardian() == ZERO_ADDRESS
     with reverts("Ownable: caller is not the owner"):
-        pool.addGuardian(alice, {"from": alice})
-    pool.addGuardian(alice)
-    assert pool.guardians(alice)
+        pool.setGuardian(alice, {"from": alice})
+    pool.setGuardian(alice)
+    assert pool.guardian() == alice
 
     pool.setPaused(cubebtc, True, True, True, {"from": alice})
     pool.setPaused(cubebtc, False, False, False, {"from": alice})
 
-    # remove guardian
-    with reverts("Must be owner or the guardian itself"):
-        pool.removeGuardian(alice, {"from": bob})
-    pool.removeGuardian(alice, {"from": alice})
-    assert not pool.guardians(alice)
-
-    pool.addGuardian(alice)
-    assert pool.guardians(alice)
-    pool.removeGuardian(alice)
-    assert not pool.guardians(alice)

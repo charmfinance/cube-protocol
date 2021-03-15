@@ -59,7 +59,7 @@ contract CubePool is Ownable, ReentrancyGuard {
     mapping(string => mapping(bool => CubeToken)) public cubeTokensMap;
     CubeToken[] public cubeTokens;
 
-    mapping(address => bool) public guardians;
+    address public guardian;
     uint256 public tradingFee;
     uint256 public maxTvl;
     bool public finalized;
@@ -331,23 +331,13 @@ contract CubePool is Ownable, ReentrancyGuard {
     }
 
     /**
-     * @notice Add a guardian. This is a trusted account which has the powers
+     * @notice Set guardian. This is a trusted account which has the powers
      * to pause and unpause trading and to emergency withdraw. These
      * protections are needed for example to protect funds if there is an
      * oracle mispricing.
      */
-    function addGuardian(address guardian) external onlyOwner {
-        require(!guardians[guardian], "Already a guardian");
-        guardians[guardian] = true;
-    }
-
-    /**
-     * @notice Remove a guardian. Can be called by owner or by the guardian
-     */
-    function removeGuardian(address guardian) external {
-        require(msg.sender == owner() || msg.sender == guardian, "Must be owner or the guardian itself");
-        require(guardians[guardian], "Not a guardian");
-        guardians[guardian] = false;
+    function setGuardian(address _guardian) external onlyOwner {
+        guardian = _guardian;
     }
 
     /**
@@ -359,7 +349,7 @@ contract CubePool is Ownable, ReentrancyGuard {
         bool withdrawPaused,
         bool updatePaused
     ) external {
-        require(msg.sender == owner() || guardians[msg.sender], "Must be owner or guardian");
+        require(msg.sender == owner() || msg.sender == guardian, "Must be owner or guardian");
         require(params[cubeToken].added, "Not added");
         params[cubeToken].depositPaused = depositPaused;
         params[cubeToken].withdrawPaused = withdrawPaused;
@@ -374,7 +364,7 @@ contract CubePool is Ownable, ReentrancyGuard {
         bool withdrawPaused,
         bool updatePaused
     ) external {
-        require(msg.sender == owner() || guardians[msg.sender], "Must be owner or guardian");
+        require(msg.sender == owner() || msg.sender == guardian, "Must be owner or guardian");
         for (uint256 i = 0; i < cubeTokens.length; i = i.add(1)) {
             CubeToken cubeToken = cubeTokens[i];
             params[cubeToken].depositPaused = depositPaused;
@@ -395,7 +385,7 @@ contract CubePool is Ownable, ReentrancyGuard {
      * @notice Transfer all ETH to owner in case of emergency
      */
     function emergencyWithdraw() external {
-        require(msg.sender == owner() || guardians[msg.sender], "Must be owner or guardian");
+        require(msg.sender == owner() || msg.sender == guardian, "Must be owner or guardian");
         require(!finalized, "Finalized");
         payable(owner()).transfer(address(this).balance);
     }
