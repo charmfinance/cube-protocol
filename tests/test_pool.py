@@ -201,7 +201,7 @@ def test_deposit_and_withdraw(
 
     assert feedsRegistry.getPrice("BTC") == px1 * 1e8
 
-    pool.setTradingFee(100)  # 1%
+    pool.setFee(100)  # 1%
 
     sim = Sim()
     sim.prices[cubebtc] = px1 ** 3
@@ -392,21 +392,21 @@ def test_owner_methods(
     tx = pool.addCubeToken("BTC", SHORT)
     invbtc = CubeToken.at(tx.return_value)
 
-    # set trading fee
+    # set fee
     with reverts("Ownable: caller is not the owner"):
-        pool.setTradingFee(100, {"from": alice})
+        pool.setFee(100, {"from": alice})
 
-    pool.setTradingFee(100)  # 1%
-    assert pool.tradingFee() == 100
+    pool.setFee(100)  # 1%
+    assert pool.fee() == 100
 
-    pool.setTradingFee(0)
-    assert pool.tradingFee() == 0
+    pool.setFee(0)
+    assert pool.fee() == 0
 
-    pool.setTradingFee(100)  # 1%
-    assert pool.tradingFee() == 100
+    pool.setFee(100)  # 1%
+    assert pool.fee() == 100
 
-    with reverts("Trading fee should be < 100%"):
-        pool.setTradingFee(1e4)
+    with reverts("Fee should be < 100%"):
+        pool.setFee(1e4)
 
     # set max tvl
     with reverts("Ownable: caller is not the owner"):

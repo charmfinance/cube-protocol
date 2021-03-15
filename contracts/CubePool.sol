@@ -60,14 +60,11 @@ contract CubePool is Ownable, ReentrancyGuard {
     CubeToken[] public cubeTokens;
 
     address public guardian;
-    uint256 public tradingFee;
+    uint256 public fee;
     uint256 public maxTvl;
     bool public finalized;
 
-    // total value is always equal to sum of totalSupply * price over all cube tokens
     uint256 public totalValue;
-
-    // pool balance is ETH balance of this contract minus trading fees accrued so far
     uint256 public poolBalance;
 
     /**
@@ -77,12 +74,12 @@ contract CubePool is Ownable, ReentrancyGuard {
     constructor(address _feedRegistry) public {
         feedRegistry = ChainlinkFeedsRegistry(_feedRegistry);
 
-        // initialize with dummy data so that it can't be initialized again
+        // Initialize with dummy data so that it can't be initialized again
         cubeTokenImpl.initialize(address(0), "", false);
     }
 
     /**
-     * @notice Deposit ETH and mint cube tokens
+     * @notice Deposit ETH to mint cube tokens
      * @dev Quantity of cube tokens minted is calculated from the amount of ETH
      * attached with transaction
      * @param cubeToken Which cube token to mint
@@ -94,7 +91,7 @@ contract CubePool is Ownable, ReentrancyGuard {
         require(_params.added, "Not added");
         require(!_params.depositPaused, "Paused");
 
-        (uint256 price, uint256 _totalValue) = _updatedPriceAndTotalValue(cubeToken);
+        (uint256 price, uint256 _totalValue) = _priceAndTotalValue(cubeToken);
         _updatePrice(cubeToken, price);
 
         uint256 ethIn = _subtractFee(msg.value);
@@ -103,13 +100,11 @@ contract CubePool is Ownable, ReentrancyGuard {
         totalValue = _totalValue.add(cubeTokensOut.mul(price));
         cubeToken.mint(to, cubeTokensOut);
 
-        // don't allow cube token to be minted if its share of the pool is too large
         if (_params.maxPoolShare > 0) {
             uint256 value = cubeToken.totalSupply().mul(price);
             require(value.mul(1e4) <= _params.maxPoolShare.mul(totalValue), "Max pool share exceeded");
         }
 
-        // cap tvl for guarded launch
         if (maxTvl > 0) {
             require(poolBalance <= maxTvl, "Max TVL exceeded");
         }
@@ -118,7 +113,7 @@ contract CubePool is Ownable, ReentrancyGuard {
     }
 
     /**
-     * @notice Withdraw ETH and burn cube tokens
+     * @notice Burn cube tokens to withdraw ETH
      * @param cubeToken Which cube token to burn
      * @param cubeTokensIn Quantity of cube tokens to burn
      * @param to Address that receives the withdrawn ETH
@@ -133,7 +128,7 @@ contract CubePool is Ownable, ReentrancyGuard {
         require(_params.added, "Not added");
         require(!_params.withdrawPaused, "Paused");
 
-        (uint256 price, uint256 _totalValue) = _updatedPriceAndTotalValue(cubeToken);
+        (uint256 price, uint256 _totalValue) = _priceAndTotalValue(cubeToken);
         _updatePrice(cubeToken, price);
 
         ethOut = _totalValue > 0 ? price.mul(cubeTokensIn).mul(poolBalance).div(_totalValue) : cubeTokensIn;
@@ -152,14 +147,13 @@ contract CubePool is Ownable, ReentrancyGuard {
      * automatically called when the cube token is minted or burned. However
      * if it has not been traded for a while, it should be called periodically
      * so that the total value does get too far out of sync
-     * @param cubeToken Cube token whose price is updated
      */
     function update(CubeToken cubeToken) public {
         Params storage _params = params[cubeToken];
         require(_params.added, "Not added");
 
         if (!_params.updatePaused) {
-            (uint256 price, uint256 _totalValue) = _updatedPriceAndTotalValue(cubeToken);
+            (uint256 price, uint256 _totalValue) = _priceAndTotalValue(cubeToken);
             _updatePrice(cubeToken, price);
             totalValue = _totalValue;
         }
@@ -174,6 +168,10 @@ contract CubePool is Ownable, ReentrancyGuard {
         }
     }
 
+    /**
+     * @notice Update all cube tokens which haven't been update in the last
+     * `maxStaleTime` seconds
+     */
     function updateAll(uint256 maxStaleTime) public {
         for (uint256 i = 0; i < cubeTokens.length; i = i.add(1)) {
             CubeToken cubeToken = cubeTokens[i];
@@ -222,54 +220,79 @@ contract CubePool is Ownable, ReentrancyGuard {
         return instance;
     }
 
-    function quote(CubeToken cubeToken, uint256 quantity) public view returns (uint256) {
-        (uint256 price, uint256 _totalValue) = _updatedPriceAndTotalValue(cubeToken);
-        return _totalValue > 0 ? price.mul(quantity).mul(poolBalance).div(_totalValue) : quantity;
+    /**
+     * @notice Calculate price of a cube token in ETH, multiplied by 1e18
+     * excluding fees. Note that this price applies to both depositing and
+     * withdrawing.
+     */
+    function quote(CubeToken cubeToken) public view returns (uint256) {
+        (uint256 price, uint256 _totalValue) = _priceAndTotalValue(cubeToken);
+        return _totalValue > 0 ? price.mul(1e18).mul(poolBalance).div(_totalValue) : 1e18;
     }
 
+    /**
+     * @notice Calculate amount of cube tokens received by depositing `ethIn`
+     * ETH.
+     */
     function quoteDeposit(CubeToken cubeToken, uint256 ethIn) external view returns (uint256) {
         ethIn = _subtractFee(ethIn);
-        (uint256 price, uint256 _totalValue) = _updatedPriceAndTotalValue(cubeToken);
+        (uint256 price, uint256 _totalValue) = _priceAndTotalValue(cubeToken);
         return poolBalance > 0 ? ethIn.mul(_totalValue).div(price).div(poolBalance) : ethIn;
     }
 
-    function quoteWithdraw(CubeToken cubeToken, uint256 quantityIn) external view returns (uint256) {
-        return _subtractFee(quote(cubeToken, quantityIn));
+    /**
+     * @notice Calculate ETH withdrawn when burning `cubeTokensIn` cube tokens.
+     */
+    function quoteWithdraw(CubeToken cubeToken, uint256 cubeTokensIn) external view returns (uint256) {
+        (uint256 price, uint256 _totalValue) = _priceAndTotalValue(cubeToken);
+        uint256 ethOut = _totalValue > 0 ? price.mul(cubeTokensIn).mul(poolBalance).div(_totalValue) : cubeTokensIn;
+        return _subtractFee(ethOut);
     }
 
     function numCubeTokens() external view returns (uint256) {
         return cubeTokens.length;
     }
 
-    function _updatedPriceAndTotalValue(CubeToken cubeToken)
-        internal
-        view
-        returns (uint256 price, uint256 _totalValue)
-    {
+    /**
+     * @dev Calculate price and total value from latest oracle price
+     */
+    function _priceAndTotalValue(CubeToken cubeToken) internal view returns (uint256 price, uint256 _totalValue) {
         Params storage _params = params[cubeToken];
         if (_params.updatePaused) {
             return (_params.lastPrice, totalValue);
         }
 
         uint256 spot = feedRegistry.getPrice(_params.spotSymbol);
+
+        // Normalize by the spot price at the time the cube token was added.
+        // This helps the price not be too large or small which could cause
+        // rounding issues
         spot = spot.mul(1e6).div(_params.initialSpotPrice);
+
+        // Set `price` to spot^3 or 1/spot^3. Its value is multiplied by 1e24
         if (_params.inverse) {
-            // 1 / spot ^ 3
             price = uint256(1e36).div(spot).div(spot).div(spot);
         } else {
-            // spot ^ 3
             price = spot.mul(spot).mul(spot);
         }
 
+        // Update total value to reflect new price. Total value is the sum of
+        // total supply x price over all cube tokens. Therefore, when the price
+        // of a cube token with total supply T changes from P1 to P2, the total
+        // value needs to be increased by T x (P2 - P1)
         uint256 _totalSupply = cubeToken.totalSupply();
         uint256 valueBefore = _params.lastPrice.mul(_totalSupply);
         uint256 valueAfter = price.mul(_totalSupply);
         _totalValue = totalValue.add(valueAfter).sub(valueBefore);
     }
 
+    /**
+     * @dev Convenience method for calculating remaining amount after fee is
+     * applied
+     */
     function _subtractFee(uint256 amount) internal view returns (uint256) {
-        uint256 fee = amount.mul(tradingFee).div(1e4); // round down fee amount
-        return amount.sub(fee);
+        uint256 feeAmount = amount.mul(fee).div(1e4); // round down fee amount
+        return amount.sub(feeAmount);
     }
 
     /**
@@ -286,8 +309,8 @@ contract CubePool is Ownable, ReentrancyGuard {
     }
 
     /**
-     * @notice Update max pool share for token. Expressed in basis points.
-     * Setting to 0 means no limit. This protects users from buying cube tokens
+     * @notice Set max pool share for a cube token. Expressed in basis points.
+     * A value of 0 means no limit. This protects users from buying cube tokens
      * with limited upside, as well as protecting the whole pool from the
      * volatility of a single asset.
      */
@@ -298,18 +321,19 @@ contract CubePool is Ownable, ReentrancyGuard {
     }
 
     /**
-     * @notice Update TVL cap for a guarded launch. Setting to 0 means no limit
+     * @notice Set TVL cap for a guarded launch. A value of 0 means no limit
      */
     function setMaxTvl(uint256 _maxTvl) external onlyOwner {
         maxTvl = _maxTvl;
     }
 
     /**
-     * @notice Update trading fee. Expressed in basis points
+     * @notice Set deposit and withdraw fee. Expressed in basis points, for
+     * example a value of 100 means a 1% fee.
      */
-    function setTradingFee(uint256 _tradingFee) external onlyOwner {
-        require(_tradingFee < 1e4, "Trading fee should be < 100%");
-        tradingFee = _tradingFee;
+    function setFee(uint256 _fee) external onlyOwner {
+        require(_fee < 1e4, "Fee should be < 100%");
+        fee = _fee;
     }
 
     /**
@@ -364,7 +388,8 @@ contract CubePool is Ownable, ReentrancyGuard {
     }
 
     /**
-     * @notice Transfer all ETH to owner in case of emergency
+     * @notice Transfer all ETH to owner in case of emergency. Cannot be called
+     * if already finalized
      */
     function emergencyWithdraw() external {
         require(msg.sender == owner() || msg.sender == guardian, "Must be owner or guardian");

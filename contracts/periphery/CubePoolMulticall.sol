@@ -50,7 +50,7 @@ contract CubePoolMulticall is Ownable, ReentrancyGuard {
             updatePaused,
         ) = pool.params(cubeToken);
 
-        price = pool.quote(cubeToken, 1e18);
+        price = pool.quote(cubeToken);
         spotPrice = pool.feedRegistry().getPrice(spotSymbol);
     }
 }

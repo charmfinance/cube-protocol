@@ -13,9 +13,11 @@ import "@openzeppelin/contracts/utils/Address.sol";
 import "../interfaces/AggregatorV3Interface.sol";
 
 /**
- * @title Chainlink Feeds Registry
- * @notice Get price in usd from an ERC20 token address
- * @dev Contains a registry of chainlink feeds. If a token/usd feed exists, just use that. Otherwise try to get prices from token/eth and eth/usd feeds.
+ * @title   Chainlink Feeds Registry
+ * @notice  Get price in usd from an ERC20 token address
+ * @dev     Contains a registry of chainlink feeds. If a TOKEN/USD feed exists,
+ *          just use that. Otherwise multiply prices from TOKEN/ETH and ETH/USD
+ *          feeds.
  */
 contract ChainlinkFeedsRegistry is Ownable {
     using Address for address;
@@ -27,21 +29,23 @@ contract ChainlinkFeedsRegistry is Ownable {
 
     /**
      * @notice Get price in usd multiplied by 1e8
-     * @param token ERC20 token whose price we want
+     * @param symbol ERC20 token whose price we want
      */
-    function getPrice(string memory token) external view returns (uint256) {
-        address tokenUsd = usdFeeds[token];
+    function getPrice(string memory symbol) external view returns (uint256) {
+        address tokenUsd = usdFeeds[symbol];
         if (tokenUsd != address(0)) {
-            return _latestPrice(usdFeeds[token]);
+            // USD feeds are already scaled by 1e8 so can just return price
+            return _latestPrice(usdFeeds[symbol]);
         }
 
-        address tokenEth = ethFeeds[token];
+        address tokenEth = ethFeeds[symbol];
         address ethUsd = usdFeeds["ETH"];
         if (tokenEth != address(0) && ethUsd != address(0)) {
             uint256 price1 = _latestPrice(tokenEth);
             uint256 price2 = _latestPrice(ethUsd);
 
-            // chainlink usd feeds are multiplied by 1e8 and eth feeds by 1e18 so need to divide by 1e18
+            // USD feeds are scale by 1e8 and ETH feeds by 1e18 so need to
+            // divide by 1e18
             return price1.mul(price2).div(1e18);
         }
     }
@@ -55,20 +59,20 @@ contract ChainlinkFeedsRegistry is Ownable {
     }
 
     /**
-     * @notice Add token/usd chainlink feed to registry
-     * @param token ERC20 token for which feed is being added
+     * @notice Add TOKEN/USD chainlink feed to registry
+     * @param symbol ERC20 token symbol for which feed is being added
      */
-    function addUsdFeed(string memory token, address feed) external onlyOwner {
+    function addUsdFeed(string memory symbol, address feed) external onlyOwner {
         require(_latestPrice(feed) > 0, "Price should be > 0");
-        usdFeeds[token] = feed;
+        usdFeeds[symbol] = feed;
     }
 
     /**
-     * @notice Add token/eth chainlink feed to registry
-     * @param token ERC20 token for which feed is being added
+     * @notice Add TOKEN/ETH chainlink feed to registry
+     * @param symbol ERC20 token symbol for which feed is being added
      */
-    function addEthFeed(string memory token, address feed) external onlyOwner {
+    function addEthFeed(string memory symbol, address feed) external onlyOwner {
         require(_latestPrice(feed) > 0, "Price should be > 0");
-        ethFeeds[token] = feed;
+        ethFeeds[symbol] = feed;
     }
 }
