@@ -26,14 +26,14 @@ class Sim(object):
         return self._trade(symbol, quantity, -1) * 0.99
 
     def _trade(self, symbol, quantity, sign):
-        cost = quantity * self.px(symbol)
+        cost = quantity * self.price(symbol)
         self.quantities[symbol] += sign * quantity
         self.balance += sign * cost * 1e18 * 0.99 ** (-sign)
         self.poolBalance += sign * cost * 1e18
         self.feeAccrued += cost * 1e16
         return cost * 1e18
 
-    def px(self, symbol):
+    def price(self, symbol):
         if self.totalValue() > 0:
             return (
                 self.prices[symbol]
@@ -211,6 +211,8 @@ def test_deposit_and_withdraw(
 
     # check btc bull token price
     cost = sim.deposit(cubebtc, qty)
+    assert approx(pool.quoteDeposit(cubebtc, cost)) == qty * 1e18
+    assert approx(pool.quote(cubebtc)) == sim.price(cubebtc) * 1e18
 
     # deposit 1 btc bull token
     bobBalance = bob.balance()
@@ -243,6 +245,8 @@ def test_deposit_and_withdraw(
 
     # check btc bear token price
     cost = sim.deposit(invbtc, qty)
+    assert approx(pool.quoteDeposit(invbtc, cost)) == qty * 1e18
+    assert approx(pool.quote(invbtc)) == sim.price(invbtc) * 1e18
 
     # deposit 1 btc bear token
     bobBalance = bob.balance()
@@ -295,8 +299,10 @@ def test_deposit_and_withdraw(
     # check btc bull token price
     quantity = cubebtc.balanceOf(alice)
     cost = sim.withdraw(cubebtc, quantity / 1e18)
+    assert approx(pool.quoteWithdraw(cubebtc, quantity), rel=1e-4) == cost
+    assert approx(pool.quote(cubebtc)) == sim.price(cubebtc) * 1e18
 
-    # burn 1 btc bull token
+    # withdraw 1 btc bull token
     bobBalance = bob.balance()
     poolBalance = pool.balance()
     tx = pool.withdraw(cubebtc, quantity, bob, {"from": alice})
@@ -330,9 +336,12 @@ def test_deposit_and_withdraw(
 
     # check btc bear token price
     quantity = invbtc.balanceOf(alice)
+    px = sim.price(invbtc) * 1e18
     cost = sim.withdraw(invbtc, quantity / 1e18)
+    assert approx(pool.quoteWithdraw(invbtc, quantity), rel=1e-4) == cost
+    assert approx(pool.quote(invbtc)) == px
 
-    # burn 1 btc bear token
+    # withdraw 1 btc bear token
     bobBalance = bob.balance()
     poolBalance = pool.balance()
     tx = pool.withdraw(invbtc, quantity, bob, {"from": alice})
