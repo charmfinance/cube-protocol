@@ -75,8 +75,9 @@ def test_add_lt(
 
     btcusd = deployer.deploy(MockAggregatorV3Interface)
     btcusd.setPrice(50000 * 1e8)
-    feedsRegistry.addUsdFeed("BTC", btcusd)
-    assert feedsRegistry.getPrice("BTC") == 50000 * 1e8
+    BTC = feedsRegistry.stringToBytes32("BTC")
+    feedsRegistry.addUsdFeed(BTC, btcusd)
+    assert feedsRegistry.getPrice(BTC) == 50000 * 1e8
 
     btcusd.setPrice(0)
     with reverts("Spot price should be > 0"):
@@ -93,7 +94,7 @@ def test_add_lt(
     assert pool.cubeTokens(0) == cubebtc
 
     (
-        token,
+        currencyKey,
         inverse,
         maxPoolShare,
         initialSpotPrice,
@@ -105,7 +106,7 @@ def test_add_lt(
         added,
     ) = pool.params(cubebtc)
     assert added
-    assert token == "BTC"
+    assert currencyKey == BTC
     assert inverse == LONG
     assert maxPoolShare == 0
     assert not depositPaused
@@ -131,7 +132,7 @@ def test_add_lt(
     assert pool.cubeTokens(1) == invbtc
 
     (
-        token,
+        currencyKey,
         inverse,
         maxPoolShare,
         initialSpotPrice,
@@ -143,7 +144,7 @@ def test_add_lt(
         added,
     ) = pool.params(invbtc)
     assert added
-    assert token == "BTC"
+    assert currencyKey == BTC
     assert inverse == SHORT
     assert maxPoolShare == 0
     assert not depositPaused
@@ -188,7 +189,8 @@ def test_deposit_and_withdraw(
 
     btcusd = deployer.deploy(MockAggregatorV3Interface)
     btcusd.setPrice(px1 * 1e8)
-    feedsRegistry.addUsdFeed("BTC", btcusd)
+    BTC = feedsRegistry.stringToBytes32("BTC")
+    feedsRegistry.addUsdFeed(BTC, btcusd)
 
     tx = pool.addCubeToken("BTC", LONG)
     cubebtc = CubeToken.at(tx.return_value)
@@ -199,7 +201,7 @@ def test_deposit_and_withdraw(
     with reverts("Not added"):
         pool.deposit(ZERO_ADDRESS, alice, {"from": bob})
 
-    assert feedsRegistry.getPrice("BTC") == px1 * 1e8
+    assert feedsRegistry.getPrice(BTC) == px1 * 1e8
 
     pool.setFee(100)  # 1%
 
@@ -249,7 +251,7 @@ def test_deposit_and_withdraw(
     # until later
     pool.setPaused(invbtc, False, False, True)
     btcusd.setPrice(px2 * 1e8)
-    assert feedsRegistry.getPrice("BTC") == px2 * 1e8
+    assert feedsRegistry.getPrice(BTC) == px2 * 1e8
     assert approx(pool.balance()) == sim.balance
     assert approx(pool.poolBalance()) == sim.poolBalance
     assert approx(pool.totalValue()) == sim.totalValue()
@@ -443,12 +445,13 @@ def test_owner_methods(
 
     btcusd = deployer.deploy(MockAggregatorV3Interface)
     btcusd.setPrice(50000 * 1e8)
-    feedsRegistry.addUsdFeed("BTC", btcusd)
+    BTC = feedsRegistry.stringToBytes32("BTC")
+    feedsRegistry.addUsdFeed(BTC, btcusd)
 
-    tx = pool.addCubeToken("BTC", LONG)
+    tx = pool.addCubeToken(BTC, LONG)
     cubebtc = CubeToken.at(tx.return_value)
 
-    tx = pool.addCubeToken("BTC", SHORT)
+    tx = pool.addCubeToken(BTC, SHORT)
     invbtc = CubeToken.at(tx.return_value)
 
     # set fee

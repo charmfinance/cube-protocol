@@ -11,15 +11,23 @@ def main():
     balance = deployer.balance()
 
     feeds = deployer.deploy(ChainlinkFeedsRegistry, publish_source=True)
-    feeds.addUsdFeed("ETH", "0x8A753747A1Fa494EC906cE90E9f37563A8AF630e")
-    feeds.addEthFeed("BTC", "0x2431452A0010a43878bF198e170F6319Af6d27F4")
-    feeds.addUsdFeed("SNX", "0xE96C4407597CD507002dF88ff6E0008AB41266Ee")
+    toBytes32 = feeds.stringToBytes32
+
+    feeds.addEthFeed(toBytes32("BTC"), "0x2431452A0010a43878bF198e170F6319Af6d27F4")
+
+    feeds.addUsdFeed(toBytes32("ETH"), "0x8A753747A1Fa494EC906cE90E9f37563A8AF630e")
+    feeds.addUsdFeed(toBytes32("LINK"), "0xd8bD0a1cB028a31AA859A21A3758685a95dE4623")
+    feeds.addUsdFeed(toBytes32("SNX"), "0xE96C4407597CD507002dF88ff6E0008AB41266Ee")
 
     pool = deployer.deploy(CubePool, feeds, publish_source=True)
     pool.setTradingFee(100)  # 1%
 
     pool.addCubeToken("BTC", 0)
     pool.addCubeToken("BTC", 1)
+    pool.addCubeToken("ETH", 0)
+    pool.addCubeToken("ETH", 1)
+    pool.addCubeToken("LINK", 0)
+    pool.addCubeToken("LINK", 1)
     pool.addCubeToken("SNX", 0)
     pool.addCubeToken("SNX", 1)
 

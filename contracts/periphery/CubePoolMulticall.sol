@@ -37,9 +37,9 @@ contract CubePoolMulticall is Ownable, ReentrancyGuard {
         symbol = cubeToken.symbol();
         totalSupply = cubeToken.totalSupply();
 
-        string memory spotSymbol;
+        bytes32 currencyKey;
         (
-            spotSymbol,
+            currencyKey,
             inverse,
             maxPoolShare,
             ,
@@ -51,6 +51,6 @@ contract CubePoolMulticall is Ownable, ReentrancyGuard {
         ) = pool.params(cubeToken);
 
         price = pool.quote(cubeToken);
-        spotPrice = pool.feedRegistry().getPrice(spotSymbol);
+        spotPrice = pool.feedRegistry().getPrice(currencyKey);
     }
 }

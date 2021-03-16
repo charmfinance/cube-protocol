@@ -40,7 +40,7 @@ contract CubePool is Ownable, ReentrancyGuard {
     event AddCubeToken(CubeToken cubeToken, string spotSymbol, bool inverse);
 
     struct Params {
-        string spotSymbol;
+        bytes32 currencyKey;
         bool inverse;
         uint256 maxPoolShare;
         uint256 initialSpotPrice;
@@ -195,9 +195,10 @@ contract CubePool is Ownable, ReentrancyGuard {
         CubeToken cubeToken = CubeToken(instance);
         cubeToken.initialize(address(this), spotSymbol, inverse);
 
+        bytes32 currencyKey = feedRegistry.stringToBytes32(spotSymbol);
         params[cubeToken] = Params({
             added: true,
-            spotSymbol: spotSymbol,
+            currencyKey: currencyKey,
             inverse: inverse,
             maxPoolShare: 0,
             depositPaused: false,
@@ -210,7 +211,7 @@ contract CubePool is Ownable, ReentrancyGuard {
         cubeTokensMap[spotSymbol][inverse] = cubeToken;
         cubeTokens.push(cubeToken);
 
-        uint256 spot = feedRegistry.getPrice(spotSymbol);
+        uint256 spot = feedRegistry.getPrice(currencyKey);
         require(spot > 0, "Spot price should be > 0");
 
         params[cubeToken].initialSpotPrice = spot;
@@ -262,7 +263,7 @@ contract CubePool is Ownable, ReentrancyGuard {
             return (_params.lastPrice, totalValue);
         }
 
-        uint256 spot = feedRegistry.getPrice(_params.spotSymbol);
+        uint256 spot = feedRegistry.getPrice(_params.currencyKey);
 
         // Normalize by the spot price at the time the cube token was added.
         // This helps the price not be too large or small which could cause
