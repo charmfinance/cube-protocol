@@ -6,6 +6,10 @@ from brownie import (
 )
 
 
+LONG = False
+SHORT = True
+
+
 def main():
     deployer = accounts.load("deployer")
     balance = deployer.balance()
@@ -20,16 +24,17 @@ def main():
     feeds.addUsdFeed(toBytes32("SNX"), "0xE96C4407597CD507002dF88ff6E0008AB41266Ee")
 
     pool = deployer.deploy(CubePool, feeds, publish_source=True)
-    pool.setTradingFee(100)  # 1%
+    pool.setFee(100)  # 1%
 
-    pool.addCubeToken("BTC", 0)
-    pool.addCubeToken("BTC", 1)
-    pool.addCubeToken("ETH", 0)
-    pool.addCubeToken("ETH", 1)
-    pool.addCubeToken("LINK", 0)
-    pool.addCubeToken("LINK", 1)
-    pool.addCubeToken("SNX", 0)
-    pool.addCubeToken("SNX", 1)
+    pool.addCubeToken("USD", LONG)
+    pool.addCubeToken("BTC", LONG)
+    pool.addCubeToken("BTC", SHORT)
+    pool.addCubeToken("ETH", LONG)
+    pool.addCubeToken("ETH", SHORT)
+    pool.addCubeToken("LINK", LONG)
+    pool.addCubeToken("LINK", SHORT)
+    pool.addCubeToken("SNX", LONG)
+    pool.addCubeToken("SNX", SHORT)
 
     print(f"Pool address: {pool.address}")
     print(f"Gas used in deployment: {(balance - deployer.balance()) / 1e18:.4f} ETH")

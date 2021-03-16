@@ -1,16 +1,26 @@
 from brownie import CubePool, accounts
+import os
 
 
-POOL = "0xcf1c5cc80a54631e12ee171d3230f863d84fb4d1"
+POOL = "0x0986002aD44fAC6e564c85C63b77F4457bA273Cd"
 
 MAX_STALE_TIME = 3600
 
 
+def getAccount(account, pw):
+    from web3.auto import w3
+
+    with open(account, "r") as f:
+        return accounts.add(w3.eth.account.decrypt(f.read(), pw))
+
+
 def main():
-    deployer = accounts.load("deployer")
-    balance = deployer.balance()
+    keeper = getAccount(os.environ["KEEPER_ACCOUNT"], os.environ["KEEPER_PW"])
+    # keeper = accounts.load(input("Brownie account: "))
+
+    balance = keeper.balance()
 
     pool = CubePool.at(POOL)
-    pool.updateAllPrices(MAX_STALE_TIME, {"from": deployer})
+    pool.updateAll(MAX_STALE_TIME, {"from": keeper})
 
-    print(f"Gas used: {(balance - deployer.balance()) / 1e18:.4f} ETH")
+    print(f"Gas used: {(balance - keeper.balance()) / 1e18:.4f} ETH")
