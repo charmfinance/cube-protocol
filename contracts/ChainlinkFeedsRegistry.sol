@@ -24,6 +24,8 @@ contract ChainlinkFeedsRegistry is Ownable {
     using SafeERC20 for IERC20;
     using SafeMath for uint256;
 
+    event AddFeed(bytes32 indexed currencyKey, bool isEth, address feed);
+
     // stringToBytes32("ETH")
     bytes32 public constant ETH = 0x4554480000000000000000000000000000000000000000000000000000000000;
 
@@ -74,6 +76,7 @@ contract ChainlinkFeedsRegistry is Ownable {
     function addUsdFeed(bytes32 currencyKey, address feed) external onlyOwner {
         require(_latestPrice(feed) > 0, "Price should be > 0");
         usdFeeds[currencyKey] = feed;
+        emit AddFeed(currencyKey, false, feed);
     }
 
     /**
@@ -83,6 +86,7 @@ contract ChainlinkFeedsRegistry is Ownable {
     function addEthFeed(bytes32 currencyKey, address feed) external onlyOwner {
         require(_latestPrice(feed) > 0, "Price should be > 0");
         ethFeeds[currencyKey] = feed;
+        emit AddFeed(currencyKey, true, feed);
     }
 
     function getPriceFromSymbol(string memory symbol) external view returns (uint256) {

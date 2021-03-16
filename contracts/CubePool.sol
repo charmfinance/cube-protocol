@@ -36,8 +36,16 @@ contract CubePool is Ownable, ReentrancyGuard {
         uint256 quantity,
         uint256 ethAmount
     );
+
     event Update(CubeToken cubeToken, uint256 price);
-    event AddCubeToken(CubeToken cubeToken, string spotSymbol, bool inverse);
+
+    event AddCubeToken(
+        CubeToken cubeToken,
+        string spotSymbol,
+        bool inverse,
+        bytes32 currencyKey,
+        uint256 initialSpotPrice
+    );
 
     struct Params {
         bytes32 currencyKey;
@@ -217,7 +225,7 @@ contract CubePool is Ownable, ReentrancyGuard {
         params[cubeToken].initialSpotPrice = spot;
         update(cubeToken);
 
-        emit AddCubeToken(cubeToken, spotSymbol, inverse);
+        emit AddCubeToken(cubeToken, spotSymbol, inverse, currencyKey, spot);
         return instance;
     }
 
