@@ -103,6 +103,8 @@ contract CubePool is Ownable, ReentrancyGuard {
         Params storage _params = params[cubeToken];
         require(_params.added, "Not added");
         require(!_params.depositPaused, "Paused");
+        require(msg.value > 0, "msg.value should be > 0");
+        require(to != address(0), "Zero address");
 
         (uint256 price, uint256 _totalValue) = _priceAndTotalValue(cubeToken);
         _updatePrice(cubeToken, price);
@@ -144,6 +146,8 @@ contract CubePool is Ownable, ReentrancyGuard {
         Params storage _params = params[cubeToken];
         require(_params.added, "Not added");
         require(!_params.withdrawPaused, "Paused");
+        require(cubeTokensIn > 0, "cubeTokensIn should be > 0");
+        require(to != address(0), "Zero address");
 
         (uint256 price, uint256 _totalValue) = _priceAndTotalValue(cubeToken);
         _updatePrice(cubeToken, price);
@@ -151,11 +155,12 @@ contract CubePool is Ownable, ReentrancyGuard {
         // normalize price so that total value of all cube tokens equals pool balance
         ethOut = _mulPrice(cubeTokensIn, price, _totalValue, poolBalance());
         totalValue = _totalValue.sub(cubeTokensIn.mul(price));
-        cubeToken.burn(msg.sender, cubeTokensIn);
 
         uint256 feeAmount = _fee(ethOut, _params.fee);
         ethOut = ethOut.sub(feeAmount);
         accruedFee = accruedFee.add(feeAmount);
+
+        cubeToken.burn(msg.sender, cubeTokensIn);
         payable(to).transfer(ethOut);
 
         emit DepositOrWithdraw(cubeToken, msg.sender, to, false, cubeTokensIn, ethOut, feeAmount);

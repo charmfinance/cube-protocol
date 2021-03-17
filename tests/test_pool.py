@@ -202,7 +202,19 @@ def test_deposit_and_withdraw(
     invbtc = CubeToken.at(tx.return_value)
 
     with reverts("Not added"):
-        pool.deposit(ZERO_ADDRESS, alice, {"from": bob})
+        pool.deposit(ZERO_ADDRESS, alice, {"from": bob, "value": 1e18})
+    with reverts("Not added"):
+        pool.withdraw(ZERO_ADDRESS, 1e18, alice, {"from": bob})
+
+    with reverts("msg.value should be > 0"):
+        pool.deposit(cubebtc, alice, {"from": bob})
+    with reverts("cubeTokensIn should be > 0"):
+        pool.withdraw(cubebtc, 0, alice, {"from": bob})
+
+    with reverts("Zero address"):
+        pool.deposit(cubebtc, ZERO_ADDRESS, {"from": bob, "value": 1e18})
+    with reverts("Zero address"):
+        pool.withdraw(cubebtc, 1e18, ZERO_ADDRESS, {"from": bob})
 
     assert feedsRegistry.getPrice(BTC) == px1 * 1e8
 
@@ -432,12 +444,6 @@ def test_deposit_and_withdraw(
     assert ev["cubeToken"] == invbtc
     assert approx(ev["price"]) == sim.prices[invbtc] / sim.initialPrices[invbtc] * 1e18
 
-    # deposit 0 does nothing
-    assert pool.deposit(cubebtc, alice, {"from": bob}).return_value == 0
-
-    # withdraw 0 does nothing
-    assert pool.withdraw(cubebtc, 0, bob, {"from": alice}).return_value == 0
-
 
 def test_owner_methods(
     a,
@@ -584,6 +590,9 @@ def test_owner_methods(
     pool.setPaused(cubebtc, True, True, True, {"from": alice})
     pool.setPaused(cubebtc, False, False, False, {"from": alice})
 
-    deployer.transfer(pool, 1e18)
     with reverts("Ownable: caller is not the owner"):
         alice.transfer(pool, 1e18)
+
+    balance = pool.poolBalance()
+    deployer.transfer(pool, 1e18)
+    assert pool.poolBalance() - balance == 1e18
