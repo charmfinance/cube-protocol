@@ -2,18 +2,22 @@
 
 An implementation of decentralized leveraged tokens.
 
-Cube tokens such as cubeBTC approximate 3X leveraged token exposure, while
-inverse cube tokens such as invBTC approximate inverse 3X exposure.
+Implemements a parimutuel pool where users can deposit ETH to mint cube tokens
+and burn them to withdraw ETH. The cube token represents a share of the pool
+and the share percentage is adjusted by the pool continuously as the price of
+the underlying asset changes.
 
-Cube tokens can be minted by depositing ETH into a pool, and ETH can be
-withdrawn by burning cube tokens.
+Cube tokens such as cubeBTC approximately track `BTC price ^ 3`, while
+inverse cube tokens such as invBTC approximately track `1 / BTC price ^ 3`.
 
 This code isn't ready. Please do not use in production.
 
 
 ### Owner and guardian privileges
 
-There are two privileged accounts for each pool. The **owner** can:
+There are two privileged accounts for each pool: an owner and a guardian.
+
+The **owner** can:
 
 - Change max pool share of each cube token
 

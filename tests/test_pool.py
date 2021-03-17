@@ -234,9 +234,9 @@ def test_deposit_and_withdraw(
 
     # check events
     (ev,) = tx.events["DepositOrWithdraw"]
+    assert ev["cubeToken"] == cubebtc
     assert ev["sender"] == bob
     assert ev["to"] == alice
-    assert ev["cubeToken"] == cubebtc
     assert ev["isDeposit"]
     assert approx(ev["quantity"]) == qty * 1e18
     assert approx(ev["ethAmount"]) == cost
@@ -281,9 +281,9 @@ def test_deposit_and_withdraw(
 
     # check events
     (ev,) = tx.events["DepositOrWithdraw"]
+    assert ev["cubeToken"] == invbtc
     assert ev["sender"] == bob
     assert ev["to"] == alice
-    assert ev["cubeToken"] == invbtc
     assert ev["isDeposit"]
     assert approx(ev["quantity"]) == qty * 1e18
     assert approx(ev["ethAmount"]) == cost
@@ -335,9 +335,9 @@ def test_deposit_and_withdraw(
 
     # check events
     (ev,) = tx.events["DepositOrWithdraw"]
+    assert ev["cubeToken"] == cubebtc
     assert ev["sender"] == bob
     assert ev["to"] == alice
-    assert ev["cubeToken"] == cubebtc
     assert ev["isDeposit"]
     assert approx(ev["quantity"]) == qty * 1e18
     assert approx(ev["ethAmount"]) == cost
@@ -373,9 +373,9 @@ def test_deposit_and_withdraw(
 
     # check events
     (ev,) = tx.events["DepositOrWithdraw"]
+    assert ev["cubeToken"] == cubebtc
     assert ev["sender"] == alice
     assert ev["to"] == bob
-    assert ev["cubeToken"] == cubebtc
     assert not ev["isDeposit"]
     assert approx(ev["quantity"]) == quantity
     assert approx(ev["ethAmount"], rel=1e-4) == cost
@@ -412,9 +412,9 @@ def test_deposit_and_withdraw(
 
     # check events
     (ev,) = tx.events["DepositOrWithdraw"]
+    assert ev["cubeToken"] == invbtc
     assert ev["sender"] == alice
     assert ev["to"] == bob
-    assert ev["cubeToken"] == invbtc
     assert not ev["isDeposit"]
     assert approx(ev["quantity"]) == quantity
     assert approx(ev["ethAmount"], rel=1e-4) == cost

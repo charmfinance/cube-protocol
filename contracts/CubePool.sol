@@ -17,11 +17,13 @@ import "./CubeToken.sol";
 
 /**
  * @title   Cube Pool
- * @notice  This pool lets users mint cube tokens by depositing ETH and
- *          burn them to withdraw ETH. Cube tokens are 3x leveraged tokens
- *          whose theoretical price is roughly proportional to the cube of the
- *          underlying price. Inverse tokens are roughly proportional to the
- *          reciprocal of the cube price.
+ * @notice  Parimutuel pool where users can deposit ETH to mint cube tokens
+ *          and burn them to withdraw ETH. The cube token represents a share of
+ *          the pool and the share percentage is adjusted by the pool
+ *          continuously as the price of the underlying asset changes.
+ *          Cube tokens such as cubeBTC approximately track BTC price ^ 3,
+ *          while inverse cube tokens such as invBTC approximately track
+ *          1 / BTC price ^ 3.
  */
 contract CubePool is Ownable, ReentrancyGuard {
     using Address for address;
@@ -29,9 +31,9 @@ contract CubePool is Ownable, ReentrancyGuard {
     using SafeMath for uint256;
 
     event DepositOrWithdraw(
+        CubeToken indexed cubeToken,
         address indexed sender,
         address indexed to,
-        CubeToken indexed cubeToken,
         bool isDeposit,
         uint256 quantity,
         uint256 ethAmount
@@ -60,12 +62,14 @@ contract CubePool is Ownable, ReentrancyGuard {
         bool added; // always true
     }
 
-    ChainlinkFeedsRegistry public feedRegistry;
+    ChainlinkFeedsRegistry public immutable feedRegistry;
     CubeToken public cubeTokenImpl = new CubeToken();
 
     mapping(CubeToken => Params) public params;
-    mapping(string => mapping(bool => CubeToken)) public cubeTokensMap;
     CubeToken[] public cubeTokens;
+
+    // underlying symbol => inverse => cube token
+    mapping(string => mapping(bool => CubeToken)) public cubeTokensMap;
 
     address public guardian;
     uint256 public fee;
@@ -101,8 +105,9 @@ contract CubePool is Ownable, ReentrancyGuard {
 
         (uint256 price, uint256 _totalValue) = _priceAndTotalValue(cubeToken);
         _updatePrice(cubeToken, price);
-
         uint256 ethIn = _subtractFee(msg.value);
+
+        // normalize price so that total value of all cube tokens equals pool balance
         cubeTokensOut = poolBalance > 0 ? ethIn.mul(_totalValue).div(price).div(poolBalance) : ethIn;
         poolBalance = poolBalance.add(ethIn);
         totalValue = _totalValue.add(cubeTokensOut.mul(price));
@@ -117,7 +122,7 @@ contract CubePool is Ownable, ReentrancyGuard {
             require(poolBalance <= maxTvl, "Max TVL exceeded");
         }
 
-        emit DepositOrWithdraw(msg.sender, to, cubeToken, true, cubeTokensOut, msg.value);
+        emit DepositOrWithdraw(cubeToken, msg.sender, to, true, cubeTokensOut, msg.value);
     }
 
     /**
@@ -138,16 +143,18 @@ contract CubePool is Ownable, ReentrancyGuard {
 
         (uint256 price, uint256 _totalValue) = _priceAndTotalValue(cubeToken);
         _updatePrice(cubeToken, price);
+        uint256 cubeTokenValue = cubeTokensIn.mul(price);
 
-        ethOut = _totalValue > 0 ? price.mul(cubeTokensIn).mul(poolBalance).div(_totalValue) : cubeTokensIn;
+        // normalize price so that total value of all cube tokens equals pool balance
+        ethOut = _totalValue > 0 ? cubeTokenValue.mul(poolBalance).div(_totalValue) : cubeTokensIn;
         poolBalance = poolBalance.sub(ethOut);
-        totalValue = _totalValue.sub(cubeTokensIn.mul(price));
+        totalValue = _totalValue.sub(cubeTokenValue);
         cubeToken.burn(msg.sender, cubeTokensIn);
 
         ethOut = _subtractFee(ethOut);
         payable(to).transfer(ethOut);
 
-        emit DepositOrWithdraw(msg.sender, to, cubeToken, false, cubeTokensIn, ethOut);
+        emit DepositOrWithdraw(cubeToken, msg.sender, to, false, cubeTokensIn, ethOut);
     }
 
     /**

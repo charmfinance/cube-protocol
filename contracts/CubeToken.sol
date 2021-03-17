@@ -6,13 +6,13 @@ import "@openzeppelin-upgradeable/contracts/token/ERC20/ERC20Upgradeable.sol";
 
 /**
  * @title   Cube Token
- * @notice  ERC20 token representing a cube token which is intended to roughly
- *          track a certain price
- *          redeemed to its `CubePool` for a certain price
- * @dev     This contract extends OpenZeppelin's ERC20 contract and allows the
- *          `cubePool` to call `mint()` and `burn()`, which can mint and burn
- *          tokens from any account. `cubePool` should be the `CubePool`
- *          contract that deployed this contract.
+ * @notice  ERC20 token representing share of a cube token pool. The share
+ *          percentage will be adjusted by the pool continuously as the price
+ *          of the underlying asset changes.
+ * @dev     This contract extends OpenZeppelin's ERC20 token contract with two
+ *          modifications. Firstly it derives its name and symbol from the
+ *          parameters given in the constructor. Secondly it allows the parent
+ *          pool to mint and burn tokens.
  */
 contract CubeToken is ERC20Upgradeable {
     address public cubePool;
@@ -21,25 +21,22 @@ contract CubeToken is ERC20Upgradeable {
 
     /**
      * @dev Initialize the contract. Should be called exactly once immediately
-     * after deployment
-     * @param _cubePool The `CubePool` contract that can mint or burn these
-     * tokens
-     * @param _spotSymbol Symbol of underying ERC20 token. Stored for
-     * convenience and not used anywhere.
-     * @param _inverse Whether long or short. Stored for convenience and not
-     * used anywhere.
+     * after deployment. `_spotSymbol` and `_inverse` are stored for
+     * convenience and not used in this contract.
+     * @param _cubePool {CubePool} contract which is given permission to mint
+     * and burn tokens.
+     * @param _spotSymbol Symbol of underying ERC20 token.
+     * @param _inverse True means 3x short token. False means 3x long token.
      */
     function initialize(
         address _cubePool,
         string memory _spotSymbol,
         bool _inverse
     ) external initializer {
-        // Example: Charm 3X Long BTC
+        // example name: Charm 3X Long BTC
+        // example symbol: cubeBTC
         string memory name = string(abi.encodePacked("Charm 3X ", _inverse ? "Short " : "Long ", _spotSymbol));
-
-        // Example: cubeBTC
         string memory symbol = string(abi.encodePacked(_inverse ? "inv" : "cube", _spotSymbol));
-
         __ERC20_init(name, symbol);
 
         cubePool = _cubePool;
