@@ -5,9 +5,10 @@ from pytest import approx
 
 
 LONG, SHORT = False, True
-MAX_POOL_SHARE_INDEX = 2
-LAST_PRICE_INDEX = 4
-LAST_UPDATED_INDEX = 5
+FEE_INDEX = 2
+MAX_POOL_SHARE_INDEX = 3
+LAST_PRICE_INDEX = 5
+LAST_UPDATED_INDEX = 6
 
 
 class Sim(object):
@@ -96,6 +97,7 @@ def test_add_lt(
     (
         currencyKey,
         inverse,
+        fee,
         maxPoolShare,
         initialSpotPrice,
         lastPrice,
@@ -114,7 +116,7 @@ def test_add_lt(
     assert not updatePaused
     assert approx(initialSpotPrice) == 50000 * 1e8
     assert lastPrice == 1e18
-    assert approx(lastUpdated, abs=1) == chain.time()
+    assert approx(lastUpdated, abs=2) == chain.time()
 
     # check event
     (ev,) = tx.events["AddCubeToken"]
@@ -134,6 +136,7 @@ def test_add_lt(
     (
         currencyKey,
         inverse,
+        fee,
         maxPoolShare,
         initialSpotPrice,
         lastPrice,
@@ -152,7 +155,7 @@ def test_add_lt(
     assert not updatePaused
     assert approx(initialSpotPrice) == 50000 * 1e8
     assert lastPrice == 1e18
-    assert approx(lastUpdated, abs=1) == chain.time()
+    assert approx(lastUpdated, abs=2) == chain.time()
 
     # check event
     (ev,) = tx.events["AddCubeToken"]
@@ -203,7 +206,8 @@ def test_deposit_and_withdraw(
 
     assert feedsRegistry.getPrice(BTC) == px1 * 1e8
 
-    pool.setFee(100)  # 1%
+    pool.setFee(cubebtc, 100)  # 1%
+    pool.setFee(invbtc, 100)  # 1%
 
     sim = Sim()
     sim.prices[cubebtc] = px1 ** 3
@@ -228,7 +232,7 @@ def test_deposit_and_withdraw(
     assert approx(pool.poolBalance(), rel=1e-3) == sim.poolBalance
     assert approx(pool.totalValue()) == sim.totalValue()
     assert approx(pool.params(cubebtc)[LAST_PRICE_INDEX]) == 1e18
-    assert approx(pool.params(cubebtc)[LAST_UPDATED_INDEX], abs=1) == chain.time()
+    assert approx(pool.params(cubebtc)[LAST_UPDATED_INDEX], abs=2) == chain.time()
     update_time = chain.time()
     chain.sleep(1)
 
@@ -274,7 +278,7 @@ def test_deposit_and_withdraw(
     assert approx(pool.totalValue()) == sim.totalValue()
     assert approx(pool.params(invbtc)[LAST_PRICE_INDEX]) == 1e18
     assert (
-        approx(pool.params(invbtc)[LAST_UPDATED_INDEX], abs=1)
+        approx(pool.params(invbtc)[LAST_UPDATED_INDEX], abs=2)
         == update_time
         < chain.time()
     )
@@ -331,7 +335,7 @@ def test_deposit_and_withdraw(
         approx(pool.params(cubebtc)[LAST_PRICE_INDEX])
         == sim.prices[cubebtc] / sim.initialPrices[cubebtc] * 1e18
     )
-    assert approx(pool.params(cubebtc)[LAST_UPDATED_INDEX], abs=1) == chain.time()
+    assert approx(pool.params(cubebtc)[LAST_UPDATED_INDEX], abs=2) == chain.time()
 
     # check events
     (ev,) = tx.events["DepositOrWithdraw"]
@@ -369,7 +373,7 @@ def test_deposit_and_withdraw(
         approx(pool.params(cubebtc)[LAST_PRICE_INDEX])
         == sim.prices[cubebtc] / sim.initialPrices[cubebtc] * 1e18
     )
-    assert approx(pool.params(cubebtc)[LAST_UPDATED_INDEX], abs=1) == chain.time()
+    assert approx(pool.params(cubebtc)[LAST_UPDATED_INDEX], abs=2) == chain.time()
 
     # check events
     (ev,) = tx.events["DepositOrWithdraw"]
@@ -408,7 +412,7 @@ def test_deposit_and_withdraw(
         approx(pool.params(invbtc)[LAST_PRICE_INDEX])
         == sim.prices[invbtc] / sim.initialPrices[invbtc] * 1e18
     )
-    assert approx(pool.params(invbtc)[LAST_UPDATED_INDEX], abs=1) == chain.time()
+    assert approx(pool.params(invbtc)[LAST_UPDATED_INDEX], abs=2) == chain.time()
 
     # check events
     (ev,) = tx.events["DepositOrWithdraw"]
@@ -456,19 +460,21 @@ def test_owner_methods(
 
     # set fee
     with reverts("Ownable: caller is not the owner"):
-        pool.setFee(100, {"from": alice})
+        pool.setFee(cubebtc, 100, {"from": alice})
 
-    pool.setFee(100)  # 1%
-    assert pool.fee() == 100
+    pool.setFee(cubebtc, 100)  # 1%
+    assert pool.params(cubebtc)[FEE_INDEX] == 100
 
-    pool.setFee(0)
-    assert pool.fee() == 0
+    pool.setFee(cubebtc, 0)
+    assert pool.params(cubebtc)[FEE_INDEX] == 0
 
-    pool.setFee(100)  # 1%
-    assert pool.fee() == 100
+    pool.setFee(cubebtc, 100)  # 1%
+    assert pool.params(cubebtc)[FEE_INDEX] == 100
 
     with reverts("Fee should be < 100%"):
-        pool.setFee(1e4)
+        pool.setFee(cubebtc, 1e4)
+
+    pool.setFee(invbtc, 100)  # 1%
 
     # set max tvl
     with reverts("Ownable: caller is not the owner"):

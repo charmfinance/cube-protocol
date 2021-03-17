@@ -52,6 +52,7 @@ contract CubePool is Ownable, ReentrancyGuard {
     struct Params {
         bytes32 currencyKey;
         bool inverse;
+        uint256 fee;
         uint256 maxPoolShare;
         uint256 initialSpotPrice;
         uint256 lastPrice;
@@ -72,7 +73,6 @@ contract CubePool is Ownable, ReentrancyGuard {
     mapping(string => mapping(bool => CubeToken)) public cubeTokensMap;
 
     address public guardian;
-    uint256 public fee;
     uint256 public maxTvl;
     bool public finalized;
 
@@ -105,7 +105,7 @@ contract CubePool is Ownable, ReentrancyGuard {
 
         (uint256 price, uint256 _totalValue) = _priceAndTotalValue(cubeToken);
         _updatePrice(cubeToken, price);
-        uint256 ethIn = _subtractFee(msg.value);
+        uint256 ethIn = _subtractFee(msg.value, _params.fee);
 
         // normalize price so that total value of all cube tokens equals pool balance
         cubeTokensOut = poolBalance > 0 ? ethIn.mul(_totalValue).div(price).div(poolBalance) : ethIn;
@@ -151,7 +151,7 @@ contract CubePool is Ownable, ReentrancyGuard {
         totalValue = _totalValue.sub(cubeTokenValue);
         cubeToken.burn(msg.sender, cubeTokensIn);
 
-        ethOut = _subtractFee(ethOut);
+        ethOut = _subtractFee(ethOut, _params.fee);
         payable(to).transfer(ethOut);
 
         emit DepositOrWithdraw(cubeToken, msg.sender, to, false, cubeTokensIn, ethOut);
@@ -215,6 +215,7 @@ contract CubePool is Ownable, ReentrancyGuard {
             added: true,
             currencyKey: currencyKey,
             inverse: inverse,
+            fee: 0,
             maxPoolShare: 0,
             depositPaused: false,
             withdrawPaused: false,
@@ -251,7 +252,7 @@ contract CubePool is Ownable, ReentrancyGuard {
      * ETH.
      */
     function quoteDeposit(CubeToken cubeToken, uint256 ethIn) external view returns (uint256) {
-        ethIn = _subtractFee(ethIn);
+        ethIn = _subtractFee(ethIn, params[cubeToken].fee);
         (uint256 price, uint256 _totalValue) = _priceAndTotalValue(cubeToken);
         return poolBalance > 0 ? ethIn.mul(_totalValue).div(price).div(poolBalance) : ethIn;
     }
@@ -262,7 +263,7 @@ contract CubePool is Ownable, ReentrancyGuard {
     function quoteWithdraw(CubeToken cubeToken, uint256 cubeTokensIn) external view returns (uint256) {
         (uint256 price, uint256 _totalValue) = _priceAndTotalValue(cubeToken);
         uint256 ethOut = _totalValue > 0 ? price.mul(cubeTokensIn).mul(poolBalance).div(_totalValue) : cubeTokensIn;
-        return _subtractFee(ethOut);
+        return _subtractFee(ethOut, params[cubeToken].fee);
     }
 
     function numCubeTokens() external view returns (uint256) {
@@ -306,7 +307,7 @@ contract CubePool is Ownable, ReentrancyGuard {
      * @dev Convenience method for calculating remaining amount after fee is
      * applied
      */
-    function _subtractFee(uint256 amount) internal view returns (uint256) {
+    function _subtractFee(uint256 amount, uint256 fee) internal pure returns (uint256) {
         uint256 feeAmount = amount.mul(fee).div(1e4); // round down fee amount
         return amount.sub(feeAmount);
     }
@@ -322,6 +323,16 @@ contract CubePool is Ownable, ReentrancyGuard {
 
     function collectFee() external onlyOwner {
         msg.sender.transfer(feeAccrued());
+    }
+
+    /**
+     * @notice Set deposit and withdraw fee. Expressed in basis points, for
+     * example a value of 100 means a 1% fee.
+     */
+    function setFee(CubeToken cubeToken, uint256 fee) external onlyOwner {
+        require(params[cubeToken].added, "Not added");
+        require(fee < 1e4, "Fee should be < 100%");
+        params[cubeToken].fee = fee;
     }
 
     /**
@@ -341,15 +352,6 @@ contract CubePool is Ownable, ReentrancyGuard {
      */
     function setMaxTvl(uint256 _maxTvl) external onlyOwner {
         maxTvl = _maxTvl;
-    }
-
-    /**
-     * @notice Set deposit and withdraw fee. Expressed in basis points, for
-     * example a value of 100 means a 1% fee.
-     */
-    function setFee(uint256 _fee) external onlyOwner {
-        require(_fee < 1e4, "Fee should be < 100%");
-        fee = _fee;
     }
 
     /**
