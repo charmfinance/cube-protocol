@@ -18,7 +18,7 @@ class Sim(object):
         self.initialPrices = defaultdict(int)
         self.balance = 0
         self.poolBalance = 0
-        self.feeAccrued = 0
+        self.accruedFee = 0
 
     def deposit(self, symbol, quantity):
         return self._trade(symbol, quantity, 1) / 0.99
@@ -31,7 +31,7 @@ class Sim(object):
         self.quantities[symbol] += sign * quantity
         self.balance += sign * cost * 1e18 * 0.99 ** (-sign)
         self.poolBalance += sign * cost * 1e18
-        self.feeAccrued += cost * 1e16
+        self.accruedFee += cost * 1e16
         return cost * 1e18
 
     def price(self, symbol):
@@ -515,7 +515,7 @@ def test_owner_methods(
     pool.deposit(invbtc, alice, {"from": alice, "value": 1e18})
 
     # collect fee
-    assert pool.feeAccrued() == 7e16
+    assert pool.accruedFee() == 7e16
 
     with reverts("Ownable: caller is not the owner"):
         pool.collectFee({"from": alice})
@@ -523,7 +523,7 @@ def test_owner_methods(
     balance = deployer.balance()
     pool.collectFee()
     assert deployer.balance() - balance == 7e16
-    assert pool.feeAccrued() == 0
+    assert pool.accruedFee() == 0
 
     # pause deposit
     with reverts("Must be owner or guardian"):

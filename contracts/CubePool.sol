@@ -78,7 +78,7 @@ contract CubePool is Ownable, ReentrancyGuard {
     bool public finalized;
 
     uint256 public totalValue;
-    uint256 public poolBalance;
+    uint256 public accruedFee;
 
     /**
      * @param _feedRegistry The feed registry contract for
@@ -109,11 +109,12 @@ contract CubePool is Ownable, ReentrancyGuard {
 
         uint256 feeAmount = _fee(msg.value, _params.fee);
         uint256 ethIn = msg.value.sub(feeAmount);
+        uint256 _poolBalance = poolBalance();
 
         // normalize price so that total value of all cube tokens equals pool balance
-        cubeTokensOut = _divPrice(ethIn, price, _totalValue);
-        poolBalance = poolBalance.add(ethIn);
+        cubeTokensOut = _divPrice(ethIn, price, _totalValue, _poolBalance.sub(msg.value));
         totalValue = _totalValue.add(cubeTokensOut.mul(price));
+        accruedFee = accruedFee.add(feeAmount);
         cubeToken.mint(to, cubeTokensOut);
 
         if (_params.maxPoolShare > 0) {
@@ -122,7 +123,7 @@ contract CubePool is Ownable, ReentrancyGuard {
         }
 
         if (maxTvl > 0) {
-            require(poolBalance <= maxTvl, "Max TVL exceeded");
+            require(_poolBalance <= maxTvl, "Max TVL exceeded");
         }
 
         emit DepositOrWithdraw(cubeToken, msg.sender, to, true, cubeTokensOut, msg.value, feeAmount);
@@ -148,13 +149,13 @@ contract CubePool is Ownable, ReentrancyGuard {
         _updatePrice(cubeToken, price);
 
         // normalize price so that total value of all cube tokens equals pool balance
-        ethOut = _mulPrice(cubeTokensIn, price, _totalValue);
-        poolBalance = poolBalance.sub(ethOut);
+        ethOut = _mulPrice(cubeTokensIn, price, _totalValue, poolBalance());
         totalValue = _totalValue.sub(cubeTokensIn.mul(price));
         cubeToken.burn(msg.sender, cubeTokensIn);
 
         uint256 feeAmount = _fee(ethOut, _params.fee);
         ethOut = ethOut.sub(feeAmount);
+        accruedFee = accruedFee.add(feeAmount);
         payable(to).transfer(ethOut);
 
         emit DepositOrWithdraw(cubeToken, msg.sender, to, false, cubeTokensIn, ethOut, feeAmount);
@@ -240,6 +241,10 @@ contract CubePool is Ownable, ReentrancyGuard {
         return instance;
     }
 
+    function poolBalance() public view returns (uint256) {
+        return address(this).balance.sub(accruedFee);
+    }
+
     /**
      * @notice Calculate price of a cube token in ETH, multiplied by 1e18
      * excluding fees. Note that this price applies to both depositing and
@@ -247,7 +252,7 @@ contract CubePool is Ownable, ReentrancyGuard {
      */
     function quote(CubeToken cubeToken) public view returns (uint256) {
         (uint256 price, uint256 _totalValue) = _priceAndTotalValue(cubeToken);
-        return _totalValue > 0 ? price.mul(1e18).mul(poolBalance).div(_totalValue) : 1e18;
+        return _mulPrice(1e18, price, _totalValue, poolBalance());
     }
 
     /**
@@ -257,7 +262,7 @@ contract CubePool is Ownable, ReentrancyGuard {
     function quoteDeposit(CubeToken cubeToken, uint256 ethIn) external view returns (uint256) {
         ethIn = ethIn.sub(_fee(ethIn, params[cubeToken].fee));
         (uint256 price, uint256 _totalValue) = _priceAndTotalValue(cubeToken);
-        return _divPrice(ethIn, price, _totalValue);
+        return _divPrice(ethIn, price, _totalValue, poolBalance());
     }
 
     /**
@@ -265,7 +270,7 @@ contract CubePool is Ownable, ReentrancyGuard {
      */
     function quoteWithdraw(CubeToken cubeToken, uint256 cubeTokensIn) external view returns (uint256) {
         (uint256 price, uint256 _totalValue) = _priceAndTotalValue(cubeToken);
-        uint256 ethOut = _mulPrice(cubeTokensIn, price, _totalValue);
+        uint256 ethOut = _mulPrice(cubeTokensIn, price, _totalValue, poolBalance());
         return ethOut.sub(_fee(ethOut, params[cubeToken].fee));
     }
 
@@ -310,18 +315,20 @@ contract CubePool is Ownable, ReentrancyGuard {
     function _mulPrice(
         uint256 quantity,
         uint256 price,
-        uint256 _totalValue
-    ) internal view returns (uint256) {
-        return _totalValue > 0 ? price.mul(quantity).mul(poolBalance).div(_totalValue) : quantity;
+        uint256 _totalValue,
+        uint256 _poolBalance
+    ) internal pure returns (uint256) {
+        return _totalValue > 0 ? price.mul(quantity).mul(_poolBalance).div(_totalValue) : quantity;
     }
 
     /// @dev Divide ETH amount by price and normalize to get quantity
     function _divPrice(
         uint256 amount,
         uint256 price,
-        uint256 _totalValue
-    ) internal view returns (uint256) {
-        return poolBalance > 0 ? amount.mul(_totalValue).div(price).div(poolBalance) : amount;
+        uint256 _totalValue,
+        uint256 _poolBalance
+    ) internal pure returns (uint256) {
+        return _poolBalance > 0 ? amount.mul(_totalValue).div(price).div(_poolBalance) : amount;
     }
 
     /// @dev Multiply by fee, rounded down
@@ -329,17 +336,9 @@ contract CubePool is Ownable, ReentrancyGuard {
         return amount.mul(fee).div(1e4);
     }
 
-    /**
-     * @notice Amount of fees accrued so far from deposits and withdrawals.
-     * @dev `poolBalance` is the amount of ETH withdrawable by cube token
-     * holders and so the fees are the remaining amount of ETH in the contract.
-     */
-    function feeAccrued() public view returns (uint256) {
-        return address(this).balance.sub(poolBalance);
-    }
-
     function collectFee() external onlyOwner {
-        msg.sender.transfer(feeAccrued());
+        msg.sender.transfer(accruedFee);
+        accruedFee = 0;
     }
 
     /**
