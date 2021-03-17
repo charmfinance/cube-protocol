@@ -74,7 +74,7 @@ contract CubePool is Ownable, ReentrancyGuard {
     mapping(string => mapping(bool => CubeToken)) public cubeTokensMap;
 
     address public guardian;
-    uint256 public maxTvl;
+    uint256 public maxPoolBalance;
     bool public finalized;
 
     uint256 public totalValue;
@@ -122,8 +122,8 @@ contract CubePool is Ownable, ReentrancyGuard {
             require(value.mul(1e4) <= _params.maxPoolShare.mul(totalValue), "Max pool share exceeded");
         }
 
-        if (maxTvl > 0) {
-            require(_poolBalance <= maxTvl, "Max TVL exceeded");
+        if (maxPoolBalance > 0) {
+            require(_poolBalance <= maxPoolBalance, "Max pool balance exceeded");
         }
 
         emit DepositOrWithdraw(cubeToken, msg.sender, to, true, cubeTokensOut, msg.value, feeAmount);
@@ -364,10 +364,11 @@ contract CubePool is Ownable, ReentrancyGuard {
     }
 
     /**
-     * @notice Set TVL cap for a guarded launch. A value of 0 means no limit
+     * @notice Set max pool balance for a guarded launch. A value of 0 means no
+     * limit
      */
-    function setMaxTvl(uint256 _maxTvl) external onlyOwner {
-        maxTvl = _maxTvl;
+    function setMaxPoolBalance(uint256 _maxPoolBalance) external onlyOwner {
+        maxPoolBalance = _maxPoolBalance;
     }
 
     /**

@@ -484,18 +484,18 @@ def test_owner_methods(
 
     # set max tvl
     with reverts("Ownable: caller is not the owner"):
-        pool.setMaxTvl(1e18, {"from": alice})
+        pool.setMaxPoolBalance(1e18, {"from": alice})
 
-    pool.setMaxTvl(2e18)
-    assert pool.maxTvl() == 2e18
+    pool.setMaxPoolBalance(2e18)
+    assert pool.maxPoolBalance() == 2e18
 
-    with reverts("Max TVL exceeded"):
+    with reverts("Max pool balance exceeded"):
         pool.deposit(cubebtc, alice, {"from": alice, "value": 2.03e18})
 
     pool.deposit(cubebtc, alice, {"from": alice, "value": 2e18})
 
-    pool.setMaxTvl(0)
-    assert pool.maxTvl() == 0
+    pool.setMaxPoolBalance(0)
+    assert pool.maxPoolBalance() == 0
 
     pool.deposit(cubebtc, alice, {"from": alice, "value": 1e18})
 
