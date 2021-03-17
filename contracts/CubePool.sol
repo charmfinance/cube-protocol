@@ -36,7 +36,8 @@ contract CubePool is Ownable, ReentrancyGuard {
         address indexed to,
         bool isDeposit,
         uint256 quantity,
-        uint256 ethAmount
+        uint256 ethAmount,
+        uint256 feeAmount
     );
 
     event Update(CubeToken cubeToken, uint256 price);
@@ -105,10 +106,12 @@ contract CubePool is Ownable, ReentrancyGuard {
 
         (uint256 price, uint256 _totalValue) = _priceAndTotalValue(cubeToken);
         _updatePrice(cubeToken, price);
-        uint256 ethIn = _subtractFee(msg.value, _params.fee);
+
+        uint256 feeAmount = _fee(msg.value, _params.fee);
+        uint256 ethIn = msg.value.sub(feeAmount);
 
         // normalize price so that total value of all cube tokens equals pool balance
-        cubeTokensOut = poolBalance > 0 ? ethIn.mul(_totalValue).div(price).div(poolBalance) : ethIn;
+        cubeTokensOut = _divPrice(ethIn, price, _totalValue);
         poolBalance = poolBalance.add(ethIn);
         totalValue = _totalValue.add(cubeTokensOut.mul(price));
         cubeToken.mint(to, cubeTokensOut);
@@ -122,7 +125,7 @@ contract CubePool is Ownable, ReentrancyGuard {
             require(poolBalance <= maxTvl, "Max TVL exceeded");
         }
 
-        emit DepositOrWithdraw(cubeToken, msg.sender, to, true, cubeTokensOut, msg.value);
+        emit DepositOrWithdraw(cubeToken, msg.sender, to, true, cubeTokensOut, msg.value, feeAmount);
     }
 
     /**
@@ -143,18 +146,18 @@ contract CubePool is Ownable, ReentrancyGuard {
 
         (uint256 price, uint256 _totalValue) = _priceAndTotalValue(cubeToken);
         _updatePrice(cubeToken, price);
-        uint256 cubeTokenValue = cubeTokensIn.mul(price);
 
         // normalize price so that total value of all cube tokens equals pool balance
-        ethOut = _totalValue > 0 ? cubeTokenValue.mul(poolBalance).div(_totalValue) : cubeTokensIn;
+        ethOut = _mulPrice(cubeTokensIn, price, _totalValue);
         poolBalance = poolBalance.sub(ethOut);
-        totalValue = _totalValue.sub(cubeTokenValue);
+        totalValue = _totalValue.sub(cubeTokensIn.mul(price));
         cubeToken.burn(msg.sender, cubeTokensIn);
 
-        ethOut = _subtractFee(ethOut, _params.fee);
+        uint256 feeAmount = _fee(ethOut, _params.fee);
+        ethOut = ethOut.sub(feeAmount);
         payable(to).transfer(ethOut);
 
-        emit DepositOrWithdraw(cubeToken, msg.sender, to, false, cubeTokensIn, ethOut);
+        emit DepositOrWithdraw(cubeToken, msg.sender, to, false, cubeTokensIn, ethOut, feeAmount);
     }
 
     /**
@@ -252,9 +255,9 @@ contract CubePool is Ownable, ReentrancyGuard {
      * ETH.
      */
     function quoteDeposit(CubeToken cubeToken, uint256 ethIn) external view returns (uint256) {
-        ethIn = _subtractFee(ethIn, params[cubeToken].fee);
+        ethIn = ethIn.sub(_fee(ethIn, params[cubeToken].fee));
         (uint256 price, uint256 _totalValue) = _priceAndTotalValue(cubeToken);
-        return poolBalance > 0 ? ethIn.mul(_totalValue).div(price).div(poolBalance) : ethIn;
+        return _divPrice(ethIn, price, _totalValue);
     }
 
     /**
@@ -262,8 +265,8 @@ contract CubePool is Ownable, ReentrancyGuard {
      */
     function quoteWithdraw(CubeToken cubeToken, uint256 cubeTokensIn) external view returns (uint256) {
         (uint256 price, uint256 _totalValue) = _priceAndTotalValue(cubeToken);
-        uint256 ethOut = _totalValue > 0 ? price.mul(cubeTokensIn).mul(poolBalance).div(_totalValue) : cubeTokensIn;
-        return _subtractFee(ethOut, params[cubeToken].fee);
+        uint256 ethOut = _mulPrice(cubeTokensIn, price, _totalValue);
+        return ethOut.sub(_fee(ethOut, params[cubeToken].fee));
     }
 
     function numCubeTokens() external view returns (uint256) {
@@ -303,13 +306,27 @@ contract CubePool is Ownable, ReentrancyGuard {
         _totalValue = totalValue.add(valueAfter).sub(valueBefore);
     }
 
-    /**
-     * @dev Convenience method for calculating remaining amount after fee is
-     * applied
-     */
-    function _subtractFee(uint256 amount, uint256 fee) internal pure returns (uint256) {
-        uint256 feeAmount = amount.mul(fee).div(1e4); // round down fee amount
-        return amount.sub(feeAmount);
+    /// @dev Multiply quantity by price and normalize to get ETH cost
+    function _mulPrice(
+        uint256 quantity,
+        uint256 price,
+        uint256 _totalValue
+    ) internal view returns (uint256) {
+        return _totalValue > 0 ? price.mul(quantity).mul(poolBalance).div(_totalValue) : quantity;
+    }
+
+    /// @dev Divide ETH amount by price and normalize to get quantity
+    function _divPrice(
+        uint256 amount,
+        uint256 price,
+        uint256 _totalValue
+    ) internal view returns (uint256) {
+        return poolBalance > 0 ? amount.mul(_totalValue).div(price).div(poolBalance) : amount;
+    }
+
+    /// @dev Multiply by fee, rounded down
+    function _fee(uint256 amount, uint256 fee) internal pure returns (uint256) {
+        return amount.mul(fee).div(1e4);
     }
 
     /**
