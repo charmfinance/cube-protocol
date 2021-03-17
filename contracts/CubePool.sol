@@ -52,15 +52,15 @@ contract CubePool is Ownable, ReentrancyGuard {
     struct Params {
         bytes32 currencyKey;
         bool inverse;
+        bool depositPaused;
+        bool withdrawPaused;
+        bool updatePaused;
+        bool added; // always true
         uint256 fee;
         uint256 maxPoolShare;
         uint256 initialSpotPrice;
         uint256 lastPrice;
         uint256 lastUpdated;
-        bool depositPaused;
-        bool withdrawPaused;
-        bool updatePaused;
-        bool added; // always true
     }
 
     ChainlinkFeedsRegistry public immutable feedRegistry;
@@ -212,14 +212,14 @@ contract CubePool is Ownable, ReentrancyGuard {
 
         bytes32 currencyKey = feedRegistry.stringToBytes32(spotSymbol);
         params[cubeToken] = Params({
-            added: true,
             currencyKey: currencyKey,
             inverse: inverse,
-            fee: 0,
-            maxPoolShare: 0,
             depositPaused: false,
             withdrawPaused: false,
             updatePaused: false,
+            added: true,
+            fee: 0,
+            maxPoolShare: 0,
             initialSpotPrice: 0,
             lastPrice: 0,
             lastUpdated: 0

@@ -40,14 +40,14 @@ contract CubePoolMulticall is Ownable, ReentrancyGuard {
         (
             currencyKey,
             inverse,
+            depositPaused,
+            withdrawPaused,
+            updatePaused,
+            ,
             fee,
             maxPoolShare,
             ,
             ,
-            ,
-            depositPaused,
-            withdrawPaused,
-            updatePaused,
         ) = pool.params(cubeToken);
 
         price = pool.quote(cubeToken);

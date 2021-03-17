@@ -5,10 +5,10 @@ from pytest import approx
 
 
 LONG, SHORT = False, True
-FEE_INDEX = 2
-MAX_POOL_SHARE_INDEX = 3
-LAST_PRICE_INDEX = 5
-LAST_UPDATED_INDEX = 6
+FEE_INDEX = 6
+MAX_POOL_SHARE_INDEX = 7
+LAST_PRICE_INDEX = 9
+LAST_UPDATED_INDEX = 10
 
 
 class Sim(object):
@@ -97,15 +97,15 @@ def test_add_lt(
     (
         currencyKey,
         inverse,
+        depositPaused,
+        withdrawPaused,
+        updatePaused,
+        added,
         fee,
         maxPoolShare,
         initialSpotPrice,
         lastPrice,
         lastUpdated,
-        depositPaused,
-        withdrawPaused,
-        updatePaused,
-        added,
     ) = pool.params(cubebtc)
     assert added
     assert currencyKey == BTC
@@ -136,15 +136,15 @@ def test_add_lt(
     (
         currencyKey,
         inverse,
+        depositPaused,
+        withdrawPaused,
+        updatePaused,
+        added,
         fee,
         maxPoolShare,
         initialSpotPrice,
         lastPrice,
         lastUpdated,
-        depositPaused,
-        withdrawPaused,
-        updatePaused,
-        added,
     ) = pool.params(invbtc)
     assert added
     assert currencyKey == BTC
