@@ -583,3 +583,7 @@ def test_owner_methods(
 
     pool.setPaused(cubebtc, True, True, True, {"from": alice})
     pool.setPaused(cubebtc, False, False, False, {"from": alice})
+
+    deployer.transfer(pool, 1e18)
+    with reverts("Ownable: caller is not the owner"):
+        alice.transfer(pool, 1e18)

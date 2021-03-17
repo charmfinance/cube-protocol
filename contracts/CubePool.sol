@@ -430,4 +430,9 @@ contract CubePool is Ownable, ReentrancyGuard {
         require(!finalized, "Finalized");
         payable(owner()).transfer(address(this).balance);
     }
+
+    /**
+     * @notice Only the owner can send ETH to the contract
+     */
+    receive() external payable onlyOwner {}
 }
