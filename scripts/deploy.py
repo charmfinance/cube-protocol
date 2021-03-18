@@ -24,7 +24,6 @@ def main():
     feeds.addUsdFeed(toBytes32("SNX"), "0xE96C4407597CD507002dF88ff6E0008AB41266Ee")
 
     pool = deployer.deploy(CubePool, feeds, publish_source=True)
-    pool.setFee(100)  # 1%
 
     pool.addCubeToken("USD", LONG)
     pool.addCubeToken("BTC", LONG)
@@ -35,6 +34,15 @@ def main():
     pool.addCubeToken("LINK", SHORT)
     pool.addCubeToken("SNX", LONG)
     pool.addCubeToken("SNX", SHORT)
+
+    pool.setFee(pool.cubeTokens(1), 150)  # 1.5%
+    pool.setFee(pool.cubeTokens(2), 150)  # 1.5%
+    pool.setFee(pool.cubeTokens(3), 150)  # 1.5%
+    pool.setFee(pool.cubeTokens(4), 150)  # 1.5%
+    pool.setFee(pool.cubeTokens(5), 300)  # 3%
+    pool.setFee(pool.cubeTokens(6), 300)  # 3%
+    pool.setFee(pool.cubeTokens(7), 300)  # 3%
+    pool.setFee(pool.cubeTokens(8), 300)  # 3%
 
     print(f"Pool address: {pool.address}")
     print(f"Gas used in deployment: {(balance - deployer.balance()) / 1e18:.4f} ETH")

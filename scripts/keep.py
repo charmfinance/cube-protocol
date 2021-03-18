@@ -2,7 +2,7 @@ from brownie import CubePool, accounts
 import os
 
 
-POOL = "0x0986002aD44fAC6e564c85C63b77F4457bA273Cd"
+POOL = "0x709a3032524688e318C0E1d6Ba9CB469B8B63b2E"
 
 MAX_STALE_TIME = 3600
 
