@@ -265,9 +265,9 @@ contract CubePool is Ownable, ReentrancyGuard {
      * ETH.
      */
     function quoteDeposit(CubeToken cubeToken, uint256 ethIn) external view returns (uint256) {
-        ethIn = ethIn.sub(_fee(ethIn, params[cubeToken].fee));
         (uint256 price, uint256 _totalValue) = _priceAndTotalValue(cubeToken);
-        return _divPrice(ethIn, price, _totalValue, poolBalance());
+        uint256 feeAmount = _fee(ethIn, params[cubeToken].fee);
+        return _divPrice(ethIn.sub(feeAmount), price, _totalValue, poolBalance());
     }
 
     /**
@@ -276,7 +276,8 @@ contract CubePool is Ownable, ReentrancyGuard {
     function quoteWithdraw(CubeToken cubeToken, uint256 cubeTokensIn) external view returns (uint256) {
         (uint256 price, uint256 _totalValue) = _priceAndTotalValue(cubeToken);
         uint256 ethOut = _mulPrice(cubeTokensIn, price, _totalValue, poolBalance());
-        return ethOut.sub(_fee(ethOut, params[cubeToken].fee));
+        uint256 feeAmount = _fee(ethOut, params[cubeToken].fee);
+        return ethOut.sub(feeAmount);
     }
 
     function numCubeTokens() external view returns (uint256) {
