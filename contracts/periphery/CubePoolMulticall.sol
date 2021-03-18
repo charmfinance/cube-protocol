@@ -15,16 +15,16 @@ contract CubePoolMulticall is Ownable, ReentrancyGuard {
         }
     }
 
-    function getCubeToken(CubePool pool, CubeToken cubeToken)
+    function getCubeToken(CubePool pool, CubeToken cubeToken, address account)
         external
         view
         returns (
             string memory name,
             string memory symbol,
             uint256 totalSupply,
+            uint256 balance,
             uint256 price,
             uint256 spotPrice,
-            bool inverse,
             uint256 fee,
             uint256 maxPoolShare,
             bool depositPaused,
@@ -35,11 +35,12 @@ contract CubePoolMulticall is Ownable, ReentrancyGuard {
         name = cubeToken.name();
         symbol = cubeToken.symbol();
         totalSupply = cubeToken.totalSupply();
+        balance = cubeToken.balanceOf(account);
 
         bytes32 currencyKey;
         (
             currencyKey,
-            inverse,
+            ,
             depositPaused,
             withdrawPaused,
             updatePaused,
