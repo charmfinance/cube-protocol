@@ -47,7 +47,6 @@ contract ChainlinkFeedsRegistry is Ownable {
         }
 
         address tokenEth = ethFeeds[currencyKey];
-        // address ethUsd = usdFeeds[ETH];
         address ethUsd = usdFeeds[ETH];
         if (tokenEth != address(0) && ethUsd != address(0)) {
             uint256 price1 = _latestPrice(tokenEth);

@@ -52,6 +52,6 @@ contract CubePoolMulticall is Ownable, ReentrancyGuard {
         ) = pool.params(cubeToken);
 
         price = pool.quote(cubeToken);
-        spotPrice = pool.feedRegistry().getPrice(currencyKey);
+        spotPrice = pool.feed().getPrice(currencyKey);
     }
 }

@@ -64,7 +64,7 @@ contract CubePool is Ownable, ReentrancyGuard {
         uint256 lastUpdated;
     }
 
-    ChainlinkFeedsRegistry public immutable feedRegistry;
+    ChainlinkFeedsRegistry public immutable feed;
     CubeToken public cubeTokenImpl = new CubeToken();
 
     mapping(CubeToken => Params) public params;
@@ -81,11 +81,11 @@ contract CubePool is Ownable, ReentrancyGuard {
     uint256 public accruedFee;
 
     /**
-     * @param _feedRegistry The feed registry contract for
+     * @param chainlinkFeedsRegistry The feed registry contract for
      * fetching spot prices from Chainlink oracles
      */
-    constructor(address _feedRegistry) public {
-        feedRegistry = ChainlinkFeedsRegistry(_feedRegistry);
+    constructor(address chainlinkFeedsRegistry) public {
+        feed = ChainlinkFeedsRegistry(chainlinkFeedsRegistry);
 
         // Initialize with dummy data so that it can't be initialized again
         cubeTokenImpl.initialize(address(0), "", false);
@@ -219,7 +219,7 @@ contract CubePool is Ownable, ReentrancyGuard {
         CubeToken cubeToken = CubeToken(instance);
         cubeToken.initialize(address(this), spotSymbol, inverse);
 
-        bytes32 currencyKey = feedRegistry.stringToBytes32(spotSymbol);
+        bytes32 currencyKey = feed.stringToBytes32(spotSymbol);
         params[cubeToken] = Params({
             currencyKey: currencyKey,
             inverse: inverse,
@@ -236,7 +236,7 @@ contract CubePool is Ownable, ReentrancyGuard {
         cubeTokensMap[spotSymbol][inverse] = cubeToken;
         cubeTokens.push(cubeToken);
 
-        uint256 spot = feedRegistry.getPrice(currencyKey);
+        uint256 spot = feed.getPrice(currencyKey);
         require(spot > 0, "Spot price should be > 0");
 
         params[cubeToken].initialSpotPrice = spot;
@@ -246,6 +246,10 @@ contract CubePool is Ownable, ReentrancyGuard {
         return instance;
     }
 
+    /**
+     * @notice ETH in this contract that belongs to cube token holders. The
+     * remaining ETH are the accrued fees that can be withdrawn by the owner.
+     */
     function poolBalance() public view returns (uint256) {
         return address(this).balance.sub(accruedFee);
     }
@@ -284,16 +288,14 @@ contract CubePool is Ownable, ReentrancyGuard {
         return cubeTokens.length;
     }
 
-    /**
-     * @dev Calculate price and total value from latest oracle price
-     */
+    /// @dev Calculate price and total value from latest oracle price
     function _priceAndTotalValue(CubeToken cubeToken) internal view returns (uint256 price, uint256 _totalValue) {
         Params storage _params = params[cubeToken];
         if (_params.updatePaused) {
             return (_params.lastPrice, totalValue);
         }
 
-        uint256 spot = feedRegistry.getPrice(_params.currencyKey);
+        uint256 spot = feed.getPrice(_params.currencyKey);
 
         // Normalize by the spot price at the time the cube token was added.
         // This helps the price not be too large or small which could cause
@@ -343,7 +345,7 @@ contract CubePool is Ownable, ReentrancyGuard {
     }
 
     function collectFee() external onlyOwner {
-        msg.sender.transfer(accruedFee);
+        payable(owner()).transfer(accruedFee);
         accruedFee = 0;
     }
 
@@ -395,7 +397,7 @@ contract CubePool is Ownable, ReentrancyGuard {
         bool depositPaused,
         bool withdrawPaused,
         bool updatePaused
-    ) external {
+    ) public {
         require(msg.sender == owner() || msg.sender == guardian, "Must be owner or guardian");
         require(params[cubeToken].added, "Not added");
         params[cubeToken].depositPaused = depositPaused;
@@ -412,11 +414,9 @@ contract CubePool is Ownable, ReentrancyGuard {
         bool updatePaused
     ) external {
         require(msg.sender == owner() || msg.sender == guardian, "Must be owner or guardian");
-        for (uint256 i = 0; i < cubeTokens.length; i = i.add(1)) {
-            CubeToken cubeToken = cubeTokens[i];
-            params[cubeToken].depositPaused = depositPaused;
-            params[cubeToken].withdrawPaused = withdrawPaused;
-            params[cubeToken].updatePaused = updatePaused;
+        uint256 n = cubeTokens.length;
+        for (uint256 i = 0; i < n; i = i.add(1)) {
+            setPaused(cubeTokens[i], depositPaused, withdrawPaused, updatePaused);
         }
     }
 
