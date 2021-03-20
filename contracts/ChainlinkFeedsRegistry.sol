@@ -70,20 +70,22 @@ contract ChainlinkFeedsRegistry is Ownable {
 
     /**
      * @notice Add TOKEN/USD chainlink feed to registry
-     * @param currencyKey ERC20 token symbol for which feed is being added
+     * @param symbol ERC20 token symbol for which feed is being added
      */
-    function addUsdFeed(bytes32 currencyKey, address feed) external onlyOwner {
+    function addUsdFeed(string memory symbol, address feed) external onlyOwner {
         require(_latestPrice(feed) > 0, "Price should be > 0");
+        bytes32 currencyKey = stringToBytes32(symbol);
         usdFeeds[currencyKey] = feed;
         emit AddFeed(currencyKey, false, feed);
     }
 
     /**
      * @notice Add TOKEN/ETH chainlink feed to registry
-     * @param currencyKey ERC20 token symbol for which feed is being added
+     * @param symbol ERC20 token symbol for which feed is being added
      */
-    function addEthFeed(bytes32 currencyKey, address feed) external onlyOwner {
+    function addEthFeed(string memory symbol, address feed) external onlyOwner {
         require(_latestPrice(feed) > 0, "Price should be > 0");
+        bytes32 currencyKey = stringToBytes32(symbol);
         ethFeeds[currencyKey] = feed;
         emit AddFeed(currencyKey, true, feed);
     }

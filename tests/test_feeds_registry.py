@@ -41,10 +41,10 @@ def test_feeds_registry(
     cccusd.setPrice(100 * 1e8)
     ethusd.setPrice(2000 * 1e8)
 
-    feeds.addUsdFeed(AAA, aaausd)
-    feeds.addEthFeed(BBB, bbbeth)
-    feeds.addUsdFeed(CCC, cccusd)
-    feeds.addEthFeed(AAA, aaaeth)
+    feeds.addUsdFeed("AAA", aaausd)
+    feeds.addEthFeed("BBB", bbbeth)
+    feeds.addUsdFeed("CCC", cccusd)
+    feeds.addEthFeed("AAA", aaaeth)
 
     assert feeds.getPrice(AAA) == 0.1 * 1e8
     assert feeds.getPrice(BBB) == 0
@@ -56,7 +56,7 @@ def test_feeds_registry(
     assert feeds.getPriceFromSymbol("CCC") == 100 * 1e8
     assert feeds.getPriceFromSymbol("ETH") == 0
 
-    feeds.addUsdFeed(ETH, ethusd)
+    feeds.addUsdFeed("ETH", ethusd)
 
     assert feeds.getPrice(AAA) == 0.1 * 1e8
     assert feeds.getPrice(BBB) == 20000 * 1e8
