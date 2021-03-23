@@ -1,16 +1,15 @@
 # Cube tokens
 
-An implementation of decentralized leveraged tokens.
+Decentralized leveraged tokens.
 
-Implemements a parimutuel pool where users can deposit ETH to mint cube tokens
-and burn them to withdraw ETH. The cube token represents a share of the pool
-and the share percentage is adjusted by the pool continuously as the price of
-the underlying asset changes.
+Cube tokens such as cubeBTC approximately track `P ^ 3`, while
+inverse cube tokens such as invBTC approximately track `1 / P ^ 3`, where P is
+the price of BTC.
 
-Cube tokens such as cubeBTC approximately track `BTC price ^ 3`, while
-inverse cube tokens such as invBTC approximately track `1 / BTC price ^ 3`.
-
-This code isn't ready. Please do not use in production.
+Users can deposit ETH into a pool to mint cube tokens and later burn them to
+withdraw their ETH. If BTC goes up by 1%, cubeBTC's share of the pool will go up by around 3%
+and invBTC's pool share will go down by 3%. The pool shares are then normalized
+to sum to 100%.
 
 
 ### Owner and guardian privileges
@@ -29,18 +28,21 @@ The **owner** can:
 
 Both the **owner** and the **guardian** can:
 
-- Emergency withdraw all ETH from the contract. This power can later be
-  revoked if the owner calls `finalize()`
+- Emergency withdraw all ETH from the contract to the owner. This power can later be
+  revoked if the owner calls `finalize()`. This is intended to be used in the
+  case of a bug to rescue funds.
 
-- Pause and unpause deposits, withdrawals and price updates for any cube token
+- Pause and unpause deposits, withdrawals and price updates for any cube token.
+  This is intended to be used in the case of a bug or oracle failure.
 
 
 ### Repo
 
-`CubePool.sol` is the pool containing deposited ETH. Users can deposit and
-withdraw ETH from it to mint and burn cube tokens.
+`CubePool.sol` is a pool containing deposited ETH. Users can deposit ETH to
+mint cube tokens and later burn them to withdraw their ETH.
 
-`CubeToken.sol` is the ERC20 token representing a cube token.
+`CubeToken.sol` is an ERC20 token representing a cube token. It's deployed
+from the `CubePool` when a new cube token is added. 
 
 `ChainlinkFeedsRegistry.sol` is a contract containing a mapping from tokens
 to their Chainlink price feed.
@@ -48,7 +50,7 @@ to their Chainlink price feed.
 
 ### Usage
 
-Before installing, run below as a workaround for [this bug in brownie](https://github.com/eth-brownie/brownie/issues/893)
+Run below as a workaround for [this bug in brownie](https://github.com/eth-brownie/brownie/issues/893)
 ```
 brownie pm clone OpenZeppelin/openzeppelin-contracts-upgradeable@3.4.0
 ```

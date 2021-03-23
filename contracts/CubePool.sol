@@ -68,15 +68,12 @@ contract CubePool is Ownable, ReentrancyGuard {
     CubeToken public cubeTokenImpl = new CubeToken();
 
     mapping(CubeToken => Params) public params;
-    CubeToken[] public cubeTokens;
-
-    // underlying symbol => inverse => cube token
     mapping(string => mapping(bool => CubeToken)) public cubeTokensMap;
+    CubeToken[] public cubeTokens;
 
     address public guardian;
     uint256 public maxPoolBalance;
     bool public finalized;
-
     uint256 public totalValue;
     uint256 public accruedFee;
 
@@ -113,7 +110,6 @@ contract CubePool is Ownable, ReentrancyGuard {
         uint256 ethIn = msg.value.sub(feeAmount);
         uint256 _poolBalance = poolBalance();
 
-        // normalize price so that total value of all cube tokens equals pool balance
         cubeTokensOut = _divPrice(ethIn, price, _totalValue, _poolBalance.sub(msg.value));
         totalValue = _totalValue.add(cubeTokensOut.mul(price));
         accruedFee = accruedFee.add(feeAmount);
@@ -152,7 +148,6 @@ contract CubePool is Ownable, ReentrancyGuard {
         (uint256 price, uint256 _totalValue) = _priceAndTotalValue(cubeToken);
         _updatePrice(cubeToken, price);
 
-        // normalize price so that total value of all cube tokens equals pool balance
         ethOut = _mulPrice(cubeTokensIn, price, _totalValue, poolBalance());
         totalValue = _totalValue.sub(cubeTokensIn.mul(price));
 
@@ -183,6 +178,10 @@ contract CubePool is Ownable, ReentrancyGuard {
         }
     }
 
+    /**
+     * @dev Update `lastPrice` and `lastUpdated` in params. Should be called
+     * whenever a price from oracle changes.
+     */
     function _updatePrice(CubeToken cubeToken, uint256 price) internal {
         Params storage _params = params[cubeToken];
         if (!_params.updatePaused) {
@@ -297,12 +296,12 @@ contract CubePool is Ownable, ReentrancyGuard {
 
         uint256 spot = feed.getPrice(_params.currencyKey);
 
-        // Normalize by the spot price at the time the cube token was added.
+        // Divide by the spot price at the time the cube token was added.
         // This helps the price not be too large or small which could cause
-        // rounding issues
+        // rounding issues.
         spot = spot.mul(1e6).div(_params.initialSpotPrice);
 
-        // Set `price` to spot^3 or 1/spot^3. Its value is multiplied by 1e24
+        // Price is spot^3 or 1/spot^3. Its value is multiplied by 1e18.
         if (_params.inverse) {
             price = uint256(1e36).div(spot).div(spot).div(spot);
         } else {
@@ -310,9 +309,9 @@ contract CubePool is Ownable, ReentrancyGuard {
         }
 
         // Update total value to reflect new price. Total value is the sum of
-        // total supply x price over all cube tokens. Therefore, when the price
+        // total supply * price over all cube tokens. Therefore, when the price
         // of a cube token with total supply T changes from P1 to P2, the total
-        // value needs to be increased by T x (P2 - P1)
+        // value needs to be increased by T * (P2 - P1)
         uint256 _totalSupply = cubeToken.totalSupply();
         uint256 valueBefore = _params.lastPrice.mul(_totalSupply);
         uint256 valueAfter = price.mul(_totalSupply);
@@ -339,7 +338,7 @@ contract CubePool is Ownable, ReentrancyGuard {
         return _poolBalance > 0 ? amount.mul(_totalValue).div(price).div(_poolBalance) : amount;
     }
 
-    /// @dev Multiply by fee, rounded down
+    /// @dev Multiply ETH amount by fee and round down
     function _fee(uint256 amount, uint256 fee) internal pure returns (uint256) {
         return amount.mul(fee).div(1e4);
     }
