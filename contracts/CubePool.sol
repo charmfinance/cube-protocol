@@ -247,7 +247,8 @@ contract CubePool is Ownable, ReentrancyGuard {
 
     /**
      * @notice ETH in this contract that belongs to cube token holders. The
-     * remaining ETH are the accrued fees that can be withdrawn by the owner.
+     * remaining ETH are the accumulated fees that can be collected by the
+     * owner.
      */
     function poolBalance() public view returns (uint256) {
         return address(this).balance.sub(accumulatedFees);
@@ -417,8 +418,7 @@ contract CubePool is Ownable, ReentrancyGuard {
         bool updatePaused
     ) external {
         require(msg.sender == owner() || msg.sender == guardian, "Must be owner or guardian");
-        uint256 n = cubeTokens.length;
-        for (uint256 i = 0; i < n; i = i.add(1)) {
+        for (uint256 i = 0; i < cubeTokens.length; i = i.add(1)) {
             setPaused(cubeTokens[i], depositPaused, withdrawPaused, updatePaused);
         }
     }

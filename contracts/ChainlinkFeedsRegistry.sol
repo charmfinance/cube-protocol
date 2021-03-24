@@ -15,9 +15,9 @@ import "../interfaces/AggregatorV3Interface.sol";
 /**
  * @title   Chainlink Feeds Registry
  * @notice  Get price in usd from an ERC20 token address
- * @dev     Contains a registry of chainlink feeds. If a TOKEN/USD feed exists,
- *          just use that. Otherwise multiply prices from TOKEN/ETH and ETH/USD
- *          feeds. For USD, just return 1.
+ * @dev     Contains a registry of chainlink feeds. If a X/USD feed exists,
+ *          just use that. Otherwise multiply prices from X/ETH and ETH/USD
+ *          feeds. For the price of USD, just return 1.
  */
 contract ChainlinkFeedsRegistry is Ownable {
     using Address for address;
@@ -36,13 +36,14 @@ contract ChainlinkFeedsRegistry is Ownable {
     mapping(bytes32 => address) public ethFeeds;
 
     /**
-     * @notice Get price in usd multiplied by 1e8
-     * @param currencyKey ERC20 token whose price we want
+     * @notice Get price in USD multiplied by 1e8
+     * @param currencyKey Symbol of token whose price we want, converted to
+     * bytes32
      */
     function getPrice(bytes32 currencyKey) public view returns (uint256) {
         address tokenUsd = usdFeeds[currencyKey];
         if (tokenUsd != address(0)) {
-            // USD feeds are already scaled by 1e8 so can just return price
+            // USD feeds are already scaled by 1e8
             return _latestPrice(usdFeeds[currencyKey]);
         }
 
@@ -55,6 +56,8 @@ contract ChainlinkFeedsRegistry is Ownable {
             // USD feeds are scale by 1e8 and ETH feeds by 1e18 so need to
             // divide by 1e18
             return price1.mul(price2).div(1e18);
+
+        // for USD just return a price of 1
         } else if (currencyKey == USD) {
             return 1e8;
         }
@@ -69,8 +72,7 @@ contract ChainlinkFeedsRegistry is Ownable {
     }
 
     /**
-     * @notice Add TOKEN/USD chainlink feed to registry
-     * @param symbol ERC20 token symbol for which feed is being added
+     * @notice Add `symbol`/USD chainlink feed to registry
      */
     function addUsdFeed(string memory symbol, address feed) external onlyOwner {
         require(_latestPrice(feed) > 0, "Price should be > 0");
@@ -80,8 +82,7 @@ contract ChainlinkFeedsRegistry is Ownable {
     }
 
     /**
-     * @notice Add TOKEN/ETH chainlink feed to registry
-     * @param symbol ERC20 token symbol for which feed is being added
+     * @notice Add `symbol`/ETH chainlink feed to registry
      */
     function addEthFeed(string memory symbol, address feed) external onlyOwner {
         require(_latestPrice(feed) > 0, "Price should be > 0");
@@ -94,14 +95,14 @@ contract ChainlinkFeedsRegistry is Ownable {
         return getPrice(stringToBytes32(symbol));
     }
 
-    function stringToBytes32(string memory source) public pure returns (bytes32 result) {
-        bytes memory b = bytes(source);
+    function stringToBytes32(string memory s) public pure returns (bytes32 result) {
+        bytes memory b = bytes(s);
         if (b.length == 0) {
             return 0x0;
         }
 
         assembly {
-            result := mload(add(source, 32))
+            result := mload(add(s, 32))
         }
     }
 }
