@@ -35,9 +35,9 @@ contract CubePool is Ownable, ReentrancyGuard {
         address indexed sender,
         address indexed to,
         bool isDeposit,
-        uint256 quantity,
+        uint256 cubeTokenQuantity,
         uint256 ethAmount,
-        uint256 feeAmount
+        uint256 fees
     );
 
     event Update(CubeToken cubeToken, uint256 price);
@@ -75,7 +75,7 @@ contract CubePool is Ownable, ReentrancyGuard {
     uint256 public maxPoolBalance;
     bool public finalized;
     uint256 public totalValue;
-    uint256 public accruedFee;
+    uint256 public accumulatedFees;
 
     /**
      * @param chainlinkFeedsRegistry The feed registry contract for
@@ -106,13 +106,13 @@ contract CubePool is Ownable, ReentrancyGuard {
         (uint256 price, uint256 _totalValue) = _priceAndTotalValue(cubeToken);
         _updatePrice(cubeToken, price);
 
-        uint256 feeAmount = _fee(msg.value, _params.fee);
-        uint256 ethIn = msg.value.sub(feeAmount);
+        uint256 fees = _fees(msg.value, _params.fee);
+        uint256 ethIn = msg.value.sub(fees);
         uint256 _poolBalance = poolBalance();
 
         cubeTokensOut = _divPrice(ethIn, price, _totalValue, _poolBalance.sub(msg.value));
         totalValue = _totalValue.add(cubeTokensOut.mul(price));
-        accruedFee = accruedFee.add(feeAmount);
+        accumulatedFees = accumulatedFees.add(fees);
         cubeToken.mint(to, cubeTokensOut);
 
         if (_params.maxPoolShare > 0) {
@@ -124,7 +124,7 @@ contract CubePool is Ownable, ReentrancyGuard {
             require(_poolBalance <= maxPoolBalance, "Max pool balance exceeded");
         }
 
-        emit DepositOrWithdraw(cubeToken, msg.sender, to, true, cubeTokensOut, msg.value, feeAmount);
+        emit DepositOrWithdraw(cubeToken, msg.sender, to, true, cubeTokensOut, msg.value, fees);
     }
 
     /**
@@ -151,14 +151,14 @@ contract CubePool is Ownable, ReentrancyGuard {
         ethOut = _mulPrice(cubeTokensIn, price, _totalValue, poolBalance());
         totalValue = _totalValue.sub(cubeTokensIn.mul(price));
 
-        uint256 feeAmount = _fee(ethOut, _params.fee);
-        ethOut = ethOut.sub(feeAmount);
-        accruedFee = accruedFee.add(feeAmount);
+        uint256 fees = _fees(ethOut, _params.fee);
+        ethOut = ethOut.sub(fees);
+        accumulatedFees = accumulatedFees.add(fees);
 
         cubeToken.burn(msg.sender, cubeTokensIn);
         payable(to).transfer(ethOut);
 
-        emit DepositOrWithdraw(cubeToken, msg.sender, to, false, cubeTokensIn, ethOut, feeAmount);
+        emit DepositOrWithdraw(cubeToken, msg.sender, to, false, cubeTokensIn, ethOut, fees);
     }
 
     /**
@@ -250,7 +250,7 @@ contract CubePool is Ownable, ReentrancyGuard {
      * remaining ETH are the accrued fees that can be withdrawn by the owner.
      */
     function poolBalance() public view returns (uint256) {
-        return address(this).balance.sub(accruedFee);
+        return address(this).balance.sub(accumulatedFees);
     }
 
     /**
@@ -269,8 +269,8 @@ contract CubePool is Ownable, ReentrancyGuard {
      */
     function quoteDeposit(CubeToken cubeToken, uint256 ethIn) external view returns (uint256) {
         (uint256 price, uint256 _totalValue) = _priceAndTotalValue(cubeToken);
-        uint256 feeAmount = _fee(ethIn, params[cubeToken].fee);
-        return _divPrice(ethIn.sub(feeAmount), price, _totalValue, poolBalance());
+        uint256 fees = _fees(ethIn, params[cubeToken].fee);
+        return _divPrice(ethIn.sub(fees), price, _totalValue, poolBalance());
     }
 
     /**
@@ -279,8 +279,8 @@ contract CubePool is Ownable, ReentrancyGuard {
     function quoteWithdraw(CubeToken cubeToken, uint256 cubeTokensIn) external view returns (uint256) {
         (uint256 price, uint256 _totalValue) = _priceAndTotalValue(cubeToken);
         uint256 ethOut = _mulPrice(cubeTokensIn, price, _totalValue, poolBalance());
-        uint256 feeAmount = _fee(ethOut, params[cubeToken].fee);
-        return ethOut.sub(feeAmount);
+        uint256 fees = _fees(ethOut, params[cubeToken].fee);
+        return ethOut.sub(fees);
     }
 
     function numCubeTokens() external view returns (uint256) {
@@ -318,7 +318,7 @@ contract CubePool is Ownable, ReentrancyGuard {
         _totalValue = totalValue.add(valueAfter).sub(valueBefore);
     }
 
-    /// @dev Multiply quantity by price and normalize to get ETH cost
+    /// @dev Multiply cube token quantity by price and normalize to get ETH cost
     function _mulPrice(
         uint256 quantity,
         uint256 price,
@@ -328,7 +328,7 @@ contract CubePool is Ownable, ReentrancyGuard {
         return _totalValue > 0 ? price.mul(quantity).mul(_poolBalance).div(_totalValue) : quantity;
     }
 
-    /// @dev Divide ETH amount by price and normalize to get quantity
+    /// @dev Divide ETH amount by price and normalize to get cube token quantity
     function _divPrice(
         uint256 amount,
         uint256 price,
@@ -338,14 +338,18 @@ contract CubePool is Ownable, ReentrancyGuard {
         return _poolBalance > 0 ? amount.mul(_totalValue).div(price).div(_poolBalance) : amount;
     }
 
-    /// @dev Multiply ETH amount by fee and round down
-    function _fee(uint256 amount, uint256 fee) internal pure returns (uint256) {
+    /**
+     * @dev Calculate amount of fees paid in ETH
+     * @param amount Amount of ETH paid or received in deposit/withdrawal
+     * @param fee Fee rate in basis points
+     */
+    function _fees(uint256 amount, uint256 fee) internal pure returns (uint256) {
         return amount.mul(fee).div(1e4);
     }
 
-    function collectFee() external onlyOwner {
-        payable(owner()).transfer(accruedFee);
-        accruedFee = 0;
+    function collectFees() external onlyOwner {
+        payable(owner()).transfer(accumulatedFees);
+        accumulatedFees = 0;
     }
 
     /**
@@ -437,8 +441,5 @@ contract CubePool is Ownable, ReentrancyGuard {
         payable(owner()).transfer(address(this).balance);
     }
 
-    /**
-     * @notice Only the owner can send ETH to the contract
-     */
-    receive() external payable onlyOwner {}
+    receive() external payable {}
 }

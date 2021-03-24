@@ -18,7 +18,7 @@ class Sim(object):
         self.initialPrices = defaultdict(int)
         self.balance = 0
         self.poolBalance = 0
-        self.accruedFee = 0
+        self.accumulatedFees = 0
 
     def deposit(self, symbol, quantity):
         return self._trade(symbol, quantity, 1) / 0.99
@@ -31,7 +31,7 @@ class Sim(object):
         self.quantities[symbol] += sign * quantity
         self.balance += sign * cost * 1e18 * 0.99 ** (-sign)
         self.poolBalance += sign * cost * 1e18
-        self.accruedFee += cost * 1e16
+        self.accumulatedFees += cost * 1e16
         return cost * 1e18
 
     def price(self, symbol):
@@ -254,9 +254,9 @@ def test_deposit_and_withdraw(
     assert ev["sender"] == bob
     assert ev["to"] == alice
     assert ev["isDeposit"]
-    assert approx(ev["quantity"]) == qty * 1e18
+    assert approx(ev["cubeTokenQuantity"]) == qty * 1e18
     assert approx(ev["ethAmount"]) == cost
-    assert approx(ev["feeAmount"]) == cost * 0.01
+    assert approx(ev["fees"]) == cost * 0.01
 
     (ev,) = tx.events["Update"]
     assert ev["cubeToken"] == cubebtc
@@ -302,9 +302,9 @@ def test_deposit_and_withdraw(
     assert ev["sender"] == bob
     assert ev["to"] == alice
     assert ev["isDeposit"]
-    assert approx(ev["quantity"]) == qty * 1e18
+    assert approx(ev["cubeTokenQuantity"]) == qty * 1e18
     assert approx(ev["ethAmount"]) == cost
-    assert approx(ev["feeAmount"]) == cost * 0.01
+    assert approx(ev["fees"]) == cost * 0.01
 
     assert "Update" not in tx.events
 
@@ -357,9 +357,9 @@ def test_deposit_and_withdraw(
     assert ev["sender"] == bob
     assert ev["to"] == alice
     assert ev["isDeposit"]
-    assert approx(ev["quantity"]) == qty * 1e18
+    assert approx(ev["cubeTokenQuantity"]) == qty * 1e18
     assert approx(ev["ethAmount"]) == cost
-    assert approx(ev["feeAmount"]) == cost * 0.01
+    assert approx(ev["fees"]) == cost * 0.01
 
     (ev,) = tx.events["Update"]
     assert ev["cubeToken"] == cubebtc
@@ -396,9 +396,9 @@ def test_deposit_and_withdraw(
     assert ev["sender"] == alice
     assert ev["to"] == bob
     assert not ev["isDeposit"]
-    assert approx(ev["quantity"]) == quantity
+    assert approx(ev["cubeTokenQuantity"]) == quantity
     assert approx(float(ev["ethAmount"])) == cost
-    assert approx(float(ev["feeAmount"])) == int(cost / 99.0)
+    assert approx(float(ev["fees"])) == int(cost / 99.0)
 
     (ev,) = tx.events["Update"]
     assert ev["cubeToken"] == cubebtc
@@ -436,9 +436,9 @@ def test_deposit_and_withdraw(
     assert ev["sender"] == alice
     assert ev["to"] == bob
     assert not ev["isDeposit"]
-    assert approx(ev["quantity"]) == quantity
+    assert approx(ev["cubeTokenQuantity"]) == quantity
     assert approx(float(ev["ethAmount"]), rel=1e-5) == cost
-    assert approx(float(ev["feeAmount"]), rel=1e-5) == cost / 99
+    assert approx(float(ev["fees"]), rel=1e-5) == cost / 99
 
     (ev,) = tx.events["Update"]
     assert ev["cubeToken"] == invbtc
@@ -520,16 +520,16 @@ def test_owner_methods(
 
     pool.deposit(invbtc, alice, {"from": alice, "value": 1e18})
 
-    # collect fee
-    assert pool.accruedFee() == 7e16
+    # collect fees
+    assert pool.accumulatedFees() == 7e16
 
     with reverts("Ownable: caller is not the owner"):
-        pool.collectFee({"from": alice})
+        pool.collectFees({"from": alice})
 
     balance = deployer.balance()
-    pool.collectFee()
+    pool.collectFees()
     assert deployer.balance() - balance == 7e16
-    assert pool.accruedFee() == 0
+    assert pool.accumulatedFees() == 0
 
     # pause deposit
     with reverts("Must be owner or guardian"):
@@ -590,9 +590,6 @@ def test_owner_methods(
     pool.setPaused(cubebtc, True, True, True, {"from": alice})
     pool.setPaused(cubebtc, False, False, False, {"from": alice})
 
-    with reverts("Ownable: caller is not the owner"):
-        alice.transfer(pool, 1e18)
-
     balance = pool.poolBalance()
-    deployer.transfer(pool, 1e18)
+    alice.transfer(pool, 1e18)
     assert pool.poolBalance() - balance == 1e18
