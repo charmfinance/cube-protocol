@@ -56,9 +56,8 @@ contract ChainlinkFeedsRegistry is Ownable {
             // USD feeds are scale by 1e8 and ETH feeds by 1e18 so need to
             // divide by 1e18
             return price1.mul(price2).div(1e18);
-
-        // for USD just return a price of 1
         } else if (currencyKey == USD) {
+            // for USD just return a price of 1
             return 1e8;
         }
     }
