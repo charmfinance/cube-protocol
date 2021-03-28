@@ -33,7 +33,7 @@ contract CubePool is Ownable, ReentrancyGuard {
     event DepositOrWithdraw(
         CubeToken indexed cubeToken,
         address indexed sender,
-        address indexed to,
+        address indexed recipient,
         bool isDeposit,
         uint256 cubeTokenQuantity,
         uint256 ethAmount,
@@ -72,8 +72,10 @@ contract CubePool is Ownable, ReentrancyGuard {
     CubeToken[] public cubeTokens;
 
     address public guardian;
+    uint256 public protocolFee;
     uint256 public maxPoolBalance;
     bool public finalized;
+
     uint256 public totalValue;
     uint256 public accumulatedFees;
 
@@ -93,27 +95,32 @@ contract CubePool is Ownable, ReentrancyGuard {
      * @dev Quantity of cube tokens minted is calculated from the amount of ETH
      * attached with transaction
      * @param cubeToken Which cube token to mint
-     * @param to Address that receives the cube tokens
+     * @param recipient Address that receives the cube tokens
      * @return cubeTokensOut Quantity of cube tokens that were minted
      */
-    function deposit(CubeToken cubeToken, address to) external payable nonReentrant returns (uint256 cubeTokensOut) {
+    function deposit(CubeToken cubeToken, address recipient)
+        external
+        payable
+        nonReentrant
+        returns (uint256 cubeTokensOut)
+    {
         Params storage _params = params[cubeToken];
         require(_params.added, "Not added");
         require(!_params.depositPaused, "Paused");
         require(msg.value > 0, "msg.value should be > 0");
-        require(to != address(0), "Zero address");
+        require(recipient != address(0), "Zero address");
 
         (uint256 price, uint256 _totalValue) = _priceAndTotalValue(cubeToken);
         _updatePrice(cubeToken, price);
 
-        uint256 fees = _fees(msg.value, _params.fee);
+        uint256 fees = _mulFee(msg.value, _params.fee);
         uint256 ethIn = msg.value.sub(fees);
         uint256 _poolBalance = poolBalance();
 
         cubeTokensOut = _divPrice(ethIn, price, _totalValue, _poolBalance.sub(msg.value));
         totalValue = _totalValue.add(cubeTokensOut.mul(price));
-        accumulatedFees = accumulatedFees.add(fees);
-        cubeToken.mint(to, cubeTokensOut);
+        accumulatedFees = accumulatedFees.add(_mulFee(fees, protocolFee));
+        cubeToken.mint(recipient, cubeTokensOut);
 
         if (_params.maxPoolShare > 0) {
             uint256 value = cubeToken.totalSupply().mul(price);
@@ -124,26 +131,26 @@ contract CubePool is Ownable, ReentrancyGuard {
             require(_poolBalance <= maxPoolBalance, "Max pool balance exceeded");
         }
 
-        emit DepositOrWithdraw(cubeToken, msg.sender, to, true, cubeTokensOut, msg.value, fees);
+        emit DepositOrWithdraw(cubeToken, msg.sender, recipient, true, cubeTokensOut, msg.value, fees);
     }
 
     /**
      * @notice Burn cube tokens to withdraw ETH
      * @param cubeToken Which cube token to burn
      * @param cubeTokensIn Quantity of cube tokens to burn
-     * @param to Address that receives the withdrawn ETH
+     * @param recipient Address that receives the withdrawn ETH
      * @return ethOut Amount of ETH withdrawn
      */
     function withdraw(
         CubeToken cubeToken,
         uint256 cubeTokensIn,
-        address to
+        address recipient
     ) external nonReentrant returns (uint256 ethOut) {
         Params storage _params = params[cubeToken];
         require(_params.added, "Not added");
         require(!_params.withdrawPaused, "Paused");
         require(cubeTokensIn > 0, "cubeTokensIn should be > 0");
-        require(to != address(0), "Zero address");
+        require(recipient != address(0), "Zero address");
 
         (uint256 price, uint256 _totalValue) = _priceAndTotalValue(cubeToken);
         _updatePrice(cubeToken, price);
@@ -151,14 +158,14 @@ contract CubePool is Ownable, ReentrancyGuard {
         ethOut = _mulPrice(cubeTokensIn, price, _totalValue, poolBalance());
         totalValue = _totalValue.sub(cubeTokensIn.mul(price));
 
-        uint256 fees = _fees(ethOut, _params.fee);
+        uint256 fees = _mulFee(ethOut, _params.fee);
         ethOut = ethOut.sub(fees);
-        accumulatedFees = accumulatedFees.add(fees);
+        accumulatedFees = accumulatedFees.add(_mulFee(fees, protocolFee));
 
         cubeToken.burn(msg.sender, cubeTokensIn);
-        payable(to).transfer(ethOut);
+        payable(recipient).transfer(ethOut);
 
-        emit DepositOrWithdraw(cubeToken, msg.sender, to, false, cubeTokensIn, ethOut, fees);
+        emit DepositOrWithdraw(cubeToken, msg.sender, recipient, false, cubeTokensIn, ethOut, fees);
     }
 
     /**
@@ -270,7 +277,7 @@ contract CubePool is Ownable, ReentrancyGuard {
      */
     function quoteDeposit(CubeToken cubeToken, uint256 ethIn) external view returns (uint256) {
         (uint256 price, uint256 _totalValue) = _priceAndTotalValue(cubeToken);
-        uint256 fees = _fees(ethIn, params[cubeToken].fee);
+        uint256 fees = _mulFee(ethIn, params[cubeToken].fee);
         return _divPrice(ethIn.sub(fees), price, _totalValue, poolBalance());
     }
 
@@ -280,7 +287,7 @@ contract CubePool is Ownable, ReentrancyGuard {
     function quoteWithdraw(CubeToken cubeToken, uint256 cubeTokensIn) external view returns (uint256) {
         (uint256 price, uint256 _totalValue) = _priceAndTotalValue(cubeToken);
         uint256 ethOut = _mulPrice(cubeTokensIn, price, _totalValue, poolBalance());
-        uint256 fees = _fees(ethOut, params[cubeToken].fee);
+        uint256 fees = _mulFee(ethOut, params[cubeToken].fee);
         return ethOut.sub(fees);
     }
 
@@ -344,18 +351,27 @@ contract CubePool is Ownable, ReentrancyGuard {
      * @param amount Amount of ETH paid or received in deposit/withdrawal
      * @param fee Fee rate in basis points
      */
-    function _fees(uint256 amount, uint256 fee) internal pure returns (uint256) {
+    function _mulFee(uint256 amount, uint256 fee) internal pure returns (uint256) {
         return amount.mul(fee).div(1e4);
     }
 
-    function collectFees() external onlyOwner {
+    function collectProtocolFees() external onlyOwner {
         payable(owner()).transfer(accumulatedFees);
         accumulatedFees = 0;
     }
 
     /**
-     * @notice Set deposit and withdraw fee. Expressed in basis points, for
-     * example a value of 100 means a 1% fee.
+     * @notice Set protocol fee in basis points. This is the cut of fees that
+     * go to the protocol.
+     */
+    function setProtocolFee(uint256 _protocolFee) external onlyOwner {
+        require(_protocolFee <= 1e4, "Protocol fee should be <= 100%");
+        protocolFee = _protocolFee;
+    }
+
+    /**
+     * @notice Set fee in basis points charged on each deposit and withdrawal.
+     * For example a value of 100 means a 1% fee.
      */
     function setFee(CubeToken cubeToken, uint256 fee) external onlyOwner {
         require(params[cubeToken].added, "Not added");
