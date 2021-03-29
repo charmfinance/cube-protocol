@@ -57,7 +57,7 @@ contract ChainlinkFeedsRegistry is Ownable {
             // divide by 1e18
             return price1.mul(price2).div(1e18);
         } else if (currencyKey == USD) {
-            // for USD just return a price of 1
+            // For USD just return a price of 1
             return 1e8;
         }
     }
@@ -71,7 +71,8 @@ contract ChainlinkFeedsRegistry is Ownable {
     }
 
     /**
-     * @notice Add `symbol`/USD chainlink feed to registry
+     * @notice Add `symbol`/USD chainlink feed to registry. Use a value of 0x0
+     * for `feed` to remove it from registry.
      */
     function addUsdFeed(string memory symbol, address feed) external onlyOwner {
         require(_latestPrice(feed) > 0, "Price should be > 0");
@@ -81,7 +82,8 @@ contract ChainlinkFeedsRegistry is Ownable {
     }
 
     /**
-     * @notice Add `symbol`/ETH chainlink feed to registry
+     * @notice Add `symbol`/ETH chainlink feed to registry. Use a value of 0x0
+     * for `feed` to remove it from registry.
      */
     function addEthFeed(string memory symbol, address feed) external onlyOwner {
         require(_latestPrice(feed) > 0, "Price should be > 0");

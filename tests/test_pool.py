@@ -19,7 +19,7 @@ class Sim(object):
         self.initialPrices = defaultdict(int)
         self.balance = 0
         self.poolBalance = 0
-        self.accumulatedFees = 0
+        self.accruedProtocolFees = 0
 
     # returns eth cost of deposit
     def deposit(self, symbol, quantity):
@@ -38,7 +38,7 @@ class Sim(object):
         self.balance += sign * cost * 1e18 + fees
         self.poolBalance += sign * cost * 1e18 + (1.0 - self.protocolFee) * fees
 
-        self.accumulatedFees += self.protocolFee * fees
+        self.accruedProtocolFees += self.protocolFee * fees
         return cost * 1e18 + sign * fees
 
     def price(self, symbol):
@@ -227,8 +227,8 @@ def test_deposit_and_withdraw(
 
     assert feedsRegistry.getPrice(BTC) == px1 * 1e8
 
-    pool.setFee(cubebtc, 100)  # 1%
-    pool.setFee(invbtc, 100)  # 1%
+    pool.setDepositWithdrawFee(cubebtc, 100)  # 1%
+    pool.setDepositWithdrawFee(invbtc, 100)  # 1%
     pool.setProtocolFee(protocolFee * 1e4)
 
     sim = Sim(protocolFee)
@@ -486,22 +486,22 @@ def test_owner_methods(
 
     # set fee
     with reverts("Ownable: caller is not the owner"):
-        pool.setFee(cubebtc, 100, {"from": alice})
+        pool.setDepositWithdrawFee(cubebtc, 100, {"from": alice})
 
     assert pool.params(cubebtc)[FEE_INDEX] == 0
-    pool.setFee(cubebtc, 100)  # 1%
+    pool.setDepositWithdrawFee(cubebtc, 100)  # 1%
     assert pool.params(cubebtc)[FEE_INDEX] == 100
 
-    pool.setFee(cubebtc, 0)
+    pool.setDepositWithdrawFee(cubebtc, 0)
     assert pool.params(cubebtc)[FEE_INDEX] == 0
 
-    pool.setFee(cubebtc, 100)  # 1%
+    pool.setDepositWithdrawFee(cubebtc, 100)  # 1%
     assert pool.params(cubebtc)[FEE_INDEX] == 100
 
     with reverts("Fee should be < 100%"):
-        pool.setFee(cubebtc, 1e4)
+        pool.setDepositWithdrawFee(cubebtc, 1e4)
 
-    pool.setFee(invbtc, 100)  # 1%
+    pool.setDepositWithdrawFee(invbtc, 100)  # 1%
 
     # set protocol fee
     with reverts("Ownable: caller is not the owner"):
@@ -544,7 +544,7 @@ def test_owner_methods(
     pool.deposit(invbtc, alice, {"from": alice, "value": 1e18})
 
     # collect fees
-    assert pool.accumulatedFees() == 0.2 * 7e16
+    assert pool.accruedProtocolFees() == 0.2 * 7e16
 
     with reverts("Ownable: caller is not the owner"):
         pool.collectProtocolFees({"from": alice})
@@ -552,7 +552,7 @@ def test_owner_methods(
     balance = deployer.balance()
     pool.collectProtocolFees()
     assert deployer.balance() - balance == 0.2 * 7e16
-    assert pool.accumulatedFees() == 0
+    assert pool.accruedProtocolFees() == 0
 
     # pause deposit
     with reverts("Must be owner or guardian"):

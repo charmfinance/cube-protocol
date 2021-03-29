@@ -50,7 +50,7 @@ contract CubePool is Ownable, ReentrancyGuard {
         uint256 initialSpotPrice
     );
 
-    struct Params {
+    struct CubeTokenParams {
         bytes32 currencyKey;
         bool inverse;
         bool depositPaused;
@@ -67,7 +67,7 @@ contract CubePool is Ownable, ReentrancyGuard {
     ChainlinkFeedsRegistry public immutable feed;
     CubeToken public cubeTokenImpl = new CubeToken();
 
-    mapping(CubeToken => Params) public params;
+    mapping(CubeToken => CubeTokenParams) public params;
     mapping(string => mapping(bool => CubeToken)) public cubeTokensMap;
     CubeToken[] public cubeTokens;
 
@@ -77,7 +77,7 @@ contract CubePool is Ownable, ReentrancyGuard {
     bool public finalized;
 
     uint256 public totalValue;
-    uint256 public accumulatedFees;
+    uint256 public accruedProtocolFees;
 
     /**
      * @param chainlinkFeedsRegistry The feed registry contract for
@@ -104,7 +104,7 @@ contract CubePool is Ownable, ReentrancyGuard {
         nonReentrant
         returns (uint256 cubeTokensOut)
     {
-        Params storage _params = params[cubeToken];
+        CubeTokenParams storage _params = params[cubeToken];
         require(_params.added, "Not added");
         require(!_params.depositPaused, "Paused");
         require(msg.value > 0, "msg.value should be > 0");
@@ -119,12 +119,12 @@ contract CubePool is Ownable, ReentrancyGuard {
 
         cubeTokensOut = _divPrice(ethIn, price, _totalValue, _poolBalance.sub(msg.value));
         totalValue = _totalValue.add(cubeTokensOut.mul(price));
-        accumulatedFees = accumulatedFees.add(_mulFee(fees, protocolFee));
+        accruedProtocolFees = accruedProtocolFees.add(_mulFee(fees, protocolFee));
         cubeToken.mint(recipient, cubeTokensOut);
 
         if (_params.maxPoolShare > 0) {
-            uint256 value = cubeToken.totalSupply().mul(price);
-            require(value.mul(1e4) <= _params.maxPoolShare.mul(totalValue), "Max pool share exceeded");
+            uint256 supplyMulPrice = cubeToken.totalSupply().mul(price);
+            require(supplyMulPrice.mul(1e4) <= _params.maxPoolShare.mul(totalValue), "Max pool share exceeded");
         }
 
         if (maxPoolBalance > 0) {
@@ -146,7 +146,7 @@ contract CubePool is Ownable, ReentrancyGuard {
         uint256 cubeTokensIn,
         address recipient
     ) external nonReentrant returns (uint256 ethOut) {
-        Params storage _params = params[cubeToken];
+        CubeTokenParams storage _params = params[cubeToken];
         require(_params.added, "Not added");
         require(!_params.withdrawPaused, "Paused");
         require(cubeTokensIn > 0, "cubeTokensIn should be > 0");
@@ -160,7 +160,7 @@ contract CubePool is Ownable, ReentrancyGuard {
 
         uint256 fees = _mulFee(ethOut, _params.fee);
         ethOut = ethOut.sub(fees);
-        accumulatedFees = accumulatedFees.add(_mulFee(fees, protocolFee));
+        accruedProtocolFees = accruedProtocolFees.add(_mulFee(fees, protocolFee));
 
         cubeToken.burn(msg.sender, cubeTokensIn);
         payable(recipient).transfer(ethOut);
@@ -175,7 +175,7 @@ contract CubePool is Ownable, ReentrancyGuard {
      * so that the total value does get too far out of sync
      */
     function update(CubeToken cubeToken) public {
-        Params storage _params = params[cubeToken];
+        CubeTokenParams storage _params = params[cubeToken];
         require(_params.added, "Not added");
 
         if (!_params.updatePaused) {
@@ -190,7 +190,7 @@ contract CubePool is Ownable, ReentrancyGuard {
      * whenever a price from oracle changes.
      */
     function _updatePrice(CubeToken cubeToken, uint256 price) internal {
-        Params storage _params = params[cubeToken];
+        CubeTokenParams storage _params = params[cubeToken];
         if (!_params.updatePaused) {
             _params.lastPrice = price;
             _params.lastUpdated = block.timestamp;
@@ -221,12 +221,11 @@ contract CubePool is Ownable, ReentrancyGuard {
         require(address(cubeTokensMap[spotSymbol][inverse]) == address(0), "Already added");
 
         bytes32 salt = keccak256(abi.encodePacked(spotSymbol, inverse));
-        address instance = Clones.cloneDeterministic(address(cubeTokenImpl), salt);
-        CubeToken cubeToken = CubeToken(instance);
+        CubeToken cubeToken = CubeToken(Clones.cloneDeterministic(address(cubeTokenImpl), salt));
         cubeToken.initialize(address(this), spotSymbol, inverse);
 
         bytes32 currencyKey = feed.stringToBytes32(spotSymbol);
-        params[cubeToken] = Params({
+        params[cubeToken] = CubeTokenParams({
             currencyKey: currencyKey,
             inverse: inverse,
             depositPaused: false,
@@ -249,7 +248,7 @@ contract CubePool is Ownable, ReentrancyGuard {
         update(cubeToken);
 
         emit AddCubeToken(cubeToken, spotSymbol, inverse, currencyKey, spot);
-        return instance;
+        return address(cubeToken);
     }
 
     /**
@@ -258,7 +257,7 @@ contract CubePool is Ownable, ReentrancyGuard {
      * owner.
      */
     function poolBalance() public view returns (uint256) {
-        return address(this).balance.sub(accumulatedFees);
+        return address(this).balance.sub(accruedProtocolFees);
     }
 
     /**
@@ -297,7 +296,7 @@ contract CubePool is Ownable, ReentrancyGuard {
 
     /// @dev Calculate price and total value from latest oracle price
     function _priceAndTotalValue(CubeToken cubeToken) internal view returns (uint256 price, uint256 _totalValue) {
-        Params storage _params = params[cubeToken];
+        CubeTokenParams storage _params = params[cubeToken];
         if (_params.updatePaused) {
             return (_params.lastPrice, totalValue);
         }
@@ -306,7 +305,7 @@ contract CubePool is Ownable, ReentrancyGuard {
 
         // Divide by the spot price at the time the cube token was added.
         // This helps the price not be too large or small which could cause
-        // rounding issues.
+        // overflow or rounding issues.
         spot = spot.mul(1e6).div(_params.initialSpotPrice);
 
         // Price is spot^3 or 1/spot^3. Its value is multiplied by 1e18.
@@ -319,7 +318,7 @@ contract CubePool is Ownable, ReentrancyGuard {
         // Update total value to reflect new price. Total value is the sum of
         // total supply * price over all cube tokens. Therefore, when the price
         // of a cube token with total supply T changes from P1 to P2, the total
-        // value needs to be increased by T * (P2 - P1)
+        // value needs to be increased by T * P2 - T * P1.
         uint256 _totalSupply = cubeToken.totalSupply();
         uint256 valueBefore = _params.lastPrice.mul(_totalSupply);
         uint256 valueAfter = price.mul(_totalSupply);
@@ -346,18 +345,14 @@ contract CubePool is Ownable, ReentrancyGuard {
         return _poolBalance > 0 ? amount.mul(_totalValue).div(price).div(_poolBalance) : amount;
     }
 
-    /**
-     * @dev Calculate amount of fees paid in ETH
-     * @param amount Amount of ETH paid or received in deposit/withdrawal
-     * @param fee Fee rate in basis points
-     */
+    /// @dev Multiply an amount by a fee rate in basis points
     function _mulFee(uint256 amount, uint256 fee) internal pure returns (uint256) {
         return amount.mul(fee).div(1e4);
     }
 
     function collectProtocolFees() external onlyOwner {
-        payable(owner()).transfer(accumulatedFees);
-        accumulatedFees = 0;
+        payable(owner()).transfer(accruedProtocolFees);
+        accruedProtocolFees = 0;
     }
 
     /**
@@ -373,7 +368,7 @@ contract CubePool is Ownable, ReentrancyGuard {
      * @notice Set fee in basis points charged on each deposit and withdrawal.
      * For example a value of 100 means a 1% fee.
      */
-    function setFee(CubeToken cubeToken, uint256 fee) external onlyOwner {
+    function setDepositWithdrawFee(CubeToken cubeToken, uint256 fee) external onlyOwner {
         require(params[cubeToken].added, "Not added");
         require(fee < 1e4, "Fee should be < 100%");
         params[cubeToken].fee = fee;
