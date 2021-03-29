@@ -76,7 +76,7 @@ contract CubePool is Ownable, ReentrancyGuard {
     uint256 public maxPoolBalance;
     bool public finalized;
 
-    uint256 public totalValue;
+    uint256 public totalEquity;
     uint256 public accruedProtocolFees;
 
     /**
@@ -110,21 +110,21 @@ contract CubePool is Ownable, ReentrancyGuard {
         require(msg.value > 0, "msg.value should be > 0");
         require(recipient != address(0), "Zero address");
 
-        (uint256 price, uint256 _totalValue) = _priceAndTotalValue(cubeToken);
+        (uint256 price, uint256 _totalEquity) = _priceAndTotalEquity(cubeToken);
         _updatePrice(cubeToken, price);
 
         uint256 fees = _mulFee(msg.value, _params.fee);
         uint256 ethIn = msg.value.sub(fees);
         uint256 _poolBalance = poolBalance();
 
-        cubeTokensOut = _divPrice(ethIn, price, _totalValue, _poolBalance.sub(msg.value));
-        totalValue = _totalValue.add(cubeTokensOut.mul(price));
+        cubeTokensOut = _divPrice(ethIn, price, _totalEquity, _poolBalance.sub(msg.value));
+        totalEquity = _totalEquity.add(cubeTokensOut.mul(price));
         accruedProtocolFees = accruedProtocolFees.add(_mulFee(fees, protocolFee));
         cubeToken.mint(recipient, cubeTokensOut);
 
         if (_params.maxPoolShare > 0) {
-            uint256 supplyMulPrice = cubeToken.totalSupply().mul(price);
-            require(supplyMulPrice.mul(1e4) <= _params.maxPoolShare.mul(totalValue), "Max pool share exceeded");
+            uint256 equity = cubeToken.totalSupply().mul(price);
+            require(equity.mul(1e4) <= _params.maxPoolShare.mul(totalEquity), "Max pool share exceeded");
         }
 
         if (maxPoolBalance > 0) {
@@ -152,11 +152,11 @@ contract CubePool is Ownable, ReentrancyGuard {
         require(cubeTokensIn > 0, "cubeTokensIn should be > 0");
         require(recipient != address(0), "Zero address");
 
-        (uint256 price, uint256 _totalValue) = _priceAndTotalValue(cubeToken);
+        (uint256 price, uint256 _totalEquity) = _priceAndTotalEquity(cubeToken);
         _updatePrice(cubeToken, price);
 
-        ethOut = _mulPrice(cubeTokensIn, price, _totalValue, poolBalance());
-        totalValue = _totalValue.sub(cubeTokensIn.mul(price));
+        ethOut = _mulPrice(cubeTokensIn, price, _totalEquity, poolBalance());
+        totalEquity = _totalEquity.sub(cubeTokensIn.mul(price));
 
         uint256 fees = _mulFee(ethOut, _params.fee);
         ethOut = ethOut.sub(fees);
@@ -169,19 +169,19 @@ contract CubePool is Ownable, ReentrancyGuard {
     }
 
     /**
-     * @notice Update the stored cube token price and total value. This is
+     * @notice Update the stored cube token price and total equity. This is
      * automatically called when the cube token is minted or burned. However
      * if it has not been traded for a while, it should be called periodically
-     * so that the total value does get too far out of sync
+     * so that the total equity does get too far out of sync
      */
     function update(CubeToken cubeToken) public {
         CubeTokenParams storage _params = params[cubeToken];
         require(_params.added, "Not added");
 
         if (!_params.updatePaused) {
-            (uint256 price, uint256 _totalValue) = _priceAndTotalValue(cubeToken);
+            (uint256 price, uint256 _totalEquity) = _priceAndTotalEquity(cubeToken);
             _updatePrice(cubeToken, price);
-            totalValue = _totalValue;
+            totalEquity = _totalEquity;
         }
     }
 
@@ -266,8 +266,8 @@ contract CubePool is Ownable, ReentrancyGuard {
      * withdrawing.
      */
     function quote(CubeToken cubeToken) public view returns (uint256) {
-        (uint256 price, uint256 _totalValue) = _priceAndTotalValue(cubeToken);
-        return _mulPrice(1e18, price, _totalValue, poolBalance());
+        (uint256 price, uint256 _totalEquity) = _priceAndTotalEquity(cubeToken);
+        return _mulPrice(1e18, price, _totalEquity, poolBalance());
     }
 
     /**
@@ -275,17 +275,17 @@ contract CubePool is Ownable, ReentrancyGuard {
      * ETH.
      */
     function quoteDeposit(CubeToken cubeToken, uint256 ethIn) external view returns (uint256) {
-        (uint256 price, uint256 _totalValue) = _priceAndTotalValue(cubeToken);
+        (uint256 price, uint256 _totalEquity) = _priceAndTotalEquity(cubeToken);
         uint256 fees = _mulFee(ethIn, params[cubeToken].fee);
-        return _divPrice(ethIn.sub(fees), price, _totalValue, poolBalance());
+        return _divPrice(ethIn.sub(fees), price, _totalEquity, poolBalance());
     }
 
     /**
      * @notice Calculate ETH withdrawn when burning `cubeTokensIn` cube tokens.
      */
     function quoteWithdraw(CubeToken cubeToken, uint256 cubeTokensIn) external view returns (uint256) {
-        (uint256 price, uint256 _totalValue) = _priceAndTotalValue(cubeToken);
-        uint256 ethOut = _mulPrice(cubeTokensIn, price, _totalValue, poolBalance());
+        (uint256 price, uint256 _totalEquity) = _priceAndTotalEquity(cubeToken);
+        uint256 ethOut = _mulPrice(cubeTokensIn, price, _totalEquity, poolBalance());
         uint256 fees = _mulFee(ethOut, params[cubeToken].fee);
         return ethOut.sub(fees);
     }
@@ -294,11 +294,11 @@ contract CubePool is Ownable, ReentrancyGuard {
         return cubeTokens.length;
     }
 
-    /// @dev Calculate price and total value from latest oracle price
-    function _priceAndTotalValue(CubeToken cubeToken) internal view returns (uint256 price, uint256 _totalValue) {
+    /// @dev Calculate price and total equity from latest oracle price
+    function _priceAndTotalEquity(CubeToken cubeToken) internal view returns (uint256 price, uint256 _totalEquity) {
         CubeTokenParams storage _params = params[cubeToken];
         if (_params.updatePaused) {
-            return (_params.lastPrice, totalValue);
+            return (_params.lastPrice, totalEquity);
         }
 
         uint256 spot = feed.getPrice(_params.currencyKey);
@@ -315,34 +315,34 @@ contract CubePool is Ownable, ReentrancyGuard {
             price = spot.mul(spot).mul(spot);
         }
 
-        // Update total value to reflect new price. Total value is the sum of
+        // Update total equity to reflect new price. Total equity is the sum of
         // total supply * price over all cube tokens. Therefore, when the price
         // of a cube token with total supply T changes from P1 to P2, the total
-        // value needs to be increased by T * P2 - T * P1.
+        // equity needs to be increased by T * P2 - T * P1.
         uint256 _totalSupply = cubeToken.totalSupply();
-        uint256 valueBefore = _params.lastPrice.mul(_totalSupply);
-        uint256 valueAfter = price.mul(_totalSupply);
-        _totalValue = totalValue.add(valueAfter).sub(valueBefore);
+        uint256 equityBefore = _params.lastPrice.mul(_totalSupply);
+        uint256 equityAfter = price.mul(_totalSupply);
+        _totalEquity = totalEquity.add(equityAfter).sub(equityBefore);
     }
 
     /// @dev Multiply cube token quantity by price and normalize to get ETH cost
     function _mulPrice(
         uint256 quantity,
         uint256 price,
-        uint256 _totalValue,
+        uint256 _totalEquity,
         uint256 _poolBalance
     ) internal pure returns (uint256) {
-        return _totalValue > 0 ? price.mul(quantity).mul(_poolBalance).div(_totalValue) : quantity;
+        return _totalEquity > 0 ? price.mul(quantity).mul(_poolBalance).div(_totalEquity) : quantity;
     }
 
     /// @dev Divide ETH amount by price and normalize to get cube token quantity
     function _divPrice(
         uint256 amount,
         uint256 price,
-        uint256 _totalValue,
+        uint256 _totalEquity,
         uint256 _poolBalance
     ) internal pure returns (uint256) {
-        return _poolBalance > 0 ? amount.mul(_totalValue).div(price).div(_poolBalance) : amount;
+        return _poolBalance > 0 ? amount.mul(_totalEquity).div(price).div(_poolBalance) : amount;
     }
 
     /// @dev Multiply an amount by a fee rate in basis points

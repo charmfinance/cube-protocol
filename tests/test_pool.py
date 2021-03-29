@@ -42,18 +42,18 @@ class Sim(object):
         return cost * 1e18 + sign * fees
 
     def price(self, symbol):
-        if self.totalValue() > 0:
+        if self.totalEquity() > 0:
             return (
                 self.prices[symbol]
                 * self.poolBalance
                 / self.initialPrices[symbol]
-                / self.totalValue()
+                / self.totalEquity()
                 * 1e18
             )
         else:
             return 1.0
 
-    def totalValue(self):
+    def totalEquity(self):
         tv = sum(
             self.quantities[symbol] * self.prices[symbol] / self.initialPrices[symbol]
             for symbol in self.quantities
@@ -252,7 +252,7 @@ def test_deposit_and_withdraw(
     assert approx(cubebtc.balanceOf(alice)) == qty * 1e18
     assert approx(pool.balance()) == sim.balance
     assert approx(pool.poolBalance()) == sim.poolBalance
-    assert approx(pool.totalValue()) == sim.totalValue()
+    assert approx(pool.totalEquity()) == sim.totalEquity()
     assert approx(pool.params(cubebtc)[LAST_PRICE_INDEX]) == 1e18
     assert approx(pool.params(cubebtc)[LAST_UPDATED_INDEX], abs=3) == chain.time()
     update_time = chain.time()
@@ -281,7 +281,7 @@ def test_deposit_and_withdraw(
     assert feedsRegistry.getPrice(BTC) == px2 * 1e8
     assert approx(pool.balance()) == sim.balance
     assert approx(pool.poolBalance()) == sim.poolBalance
-    assert approx(pool.totalValue()) == sim.totalValue()
+    assert approx(pool.totalEquity()) == sim.totalEquity()
 
     # check btc bear token price
     assert approx(pool.quote(invbtc)) == sim.price(invbtc) * 1e18
@@ -298,7 +298,7 @@ def test_deposit_and_withdraw(
     assert approx(invbtc.balanceOf(alice)) == qty * 1e18
     assert approx(pool.balance()) == sim.balance
     assert approx(pool.poolBalance()) == sim.poolBalance
-    assert approx(pool.totalValue()) == sim.totalValue()
+    assert approx(pool.totalEquity()) == sim.totalEquity()
     assert approx(pool.params(invbtc)[LAST_PRICE_INDEX]) == 1e18
     assert (
         approx(pool.params(invbtc)[LAST_UPDATED_INDEX], abs=3)
@@ -326,14 +326,14 @@ def test_deposit_and_withdraw(
     sim.prices[cubebtc] = px2 ** 3
     assert approx(pool.balance()) == sim.balance
     assert approx(pool.poolBalance()) == sim.poolBalance
-    assert approx(pool.totalValue()) == sim.totalValue()
+    assert approx(pool.totalEquity()) == sim.totalEquity()
 
     # update btc bear price
     pool.update(invbtc)
     sim.prices[invbtc] = px2 ** -3
     assert approx(pool.balance()) == sim.balance
     assert approx(pool.poolBalance()) == sim.poolBalance
-    assert approx(pool.totalValue()) == sim.totalValue()
+    assert approx(pool.totalEquity()) == sim.totalEquity()
 
     # check btc bull token price
     assert approx(pool.quote(cubebtc)) == sim.price(cubebtc) * 1e18
@@ -350,7 +350,7 @@ def test_deposit_and_withdraw(
     assert approx(cubebtc.balanceOf(alice)) == 2 * qty * 1e18
     assert approx(pool.balance()) == sim.balance
     assert approx(pool.poolBalance()) == sim.poolBalance
-    assert approx(pool.totalValue()) == sim.totalValue()
+    assert approx(pool.totalEquity()) == sim.totalEquity()
     assert (
         approx(pool.params(cubebtc)[LAST_PRICE_INDEX])
         == sim.prices[cubebtc] / sim.initialPrices[cubebtc] * 1e18
@@ -391,7 +391,7 @@ def test_deposit_and_withdraw(
     assert (
         approx(pool.poolBalance() / poolBalance) == sim.poolBalance / poolBalance
     )  # divide by prev to fix rounding
-    assert approx(pool.totalValue()) == sim.totalValue()
+    assert approx(pool.totalEquity()) == sim.totalEquity()
     assert (
         approx(pool.params(cubebtc)[LAST_PRICE_INDEX])
         == sim.prices[cubebtc] / sim.initialPrices[cubebtc] * 1e18
@@ -437,7 +437,7 @@ def test_deposit_and_withdraw(
         approx(pool.poolBalance() / poolBalance, rel=1e-4)
         == sim.poolBalance / poolBalance
     )  # divide by prev to fix rounding
-    assert approx(pool.totalValue()) == 0
+    assert approx(pool.totalEquity()) == 0
     assert (
         approx(pool.params(invbtc)[LAST_PRICE_INDEX])
         == sim.prices[invbtc] / sim.initialPrices[invbtc] * 1e18
