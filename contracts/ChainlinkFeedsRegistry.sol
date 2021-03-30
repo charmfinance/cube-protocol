@@ -14,10 +14,10 @@ import "../interfaces/AggregatorV3Interface.sol";
 
 /**
  * @title   Chainlink Feeds Registry
- * @notice  Get price in usd from an ERC20 token address
- * @dev     Contains a registry of chainlink feeds. If a X/USD feed exists,
- *          just use that. Otherwise multiply prices from X/ETH and ETH/USD
- *          feeds. For the price of USD, just return 1.
+ * @notice  Stores Chainlink feed addresses and provides `getPrice()` to get
+ *          price in USD given token symbol.
+ * @dev     If an X/USD feed exists, just use that. Otherwise multiply prices
+ *          from X/ETH and ETH/USD feeds. For the price of USD, just return 1.
  */
 contract ChainlinkFeedsRegistry is Ownable {
     using Address for address;
@@ -37,23 +37,22 @@ contract ChainlinkFeedsRegistry is Ownable {
 
     /**
      * @notice Get price in USD multiplied by 1e8
-     * @param currencyKey Symbol of token whose price we want, converted to
-     * bytes32
+     * @param currencyKey Token symbol converted to bytes32
      */
     function getPrice(bytes32 currencyKey) public view returns (uint256) {
-        address tokenUsd = usdFeeds[currencyKey];
-        if (tokenUsd != address(0)) {
+        address usdFeed = usdFeeds[currencyKey];
+        if (usdFeed != address(0)) {
             // USD feeds are already scaled by 1e8
-            return _latestPrice(usdFeeds[currencyKey]);
+            return _latestPrice(usdFeed);
         }
 
-        address tokenEth = ethFeeds[currencyKey];
-        address ethUsd = usdFeeds[ETH];
-        if (tokenEth != address(0) && ethUsd != address(0)) {
-            uint256 price1 = _latestPrice(tokenEth);
-            uint256 price2 = _latestPrice(ethUsd);
+        address ethFeed = ethFeeds[currencyKey];
+        address ethUsdFeed = usdFeeds[ETH];
+        if (ethFeed != address(0) && ethUsdFeed != address(0)) {
+            uint256 price1 = _latestPrice(ethFeed);
+            uint256 price2 = _latestPrice(ethUsdFeed);
 
-            // USD feeds are scale by 1e8 and ETH feeds by 1e18 so need to
+            // USD feeds are scaled by 1e8 and ETH feeds by 1e18 so need to
             // divide by 1e18
             return price1.mul(price2).div(1e18);
         } else if (currencyKey == USD) {
@@ -71,7 +70,7 @@ contract ChainlinkFeedsRegistry is Ownable {
     }
 
     /**
-     * @notice Add `symbol`/USD chainlink feed to registry. Use a value of 0x0
+     * @notice Add `symbol`/USD Chainlink feed to registry. Use a value of 0x0
      * for `feed` to remove it from registry.
      */
     function addUsdFeed(string memory symbol, address feed) external onlyOwner {
@@ -82,7 +81,7 @@ contract ChainlinkFeedsRegistry is Ownable {
     }
 
     /**
-     * @notice Add `symbol`/ETH chainlink feed to registry. Use a value of 0x0
+     * @notice Add `symbol`/ETH Chainlink feed to registry. Use a value of 0x0
      * for `feed` to remove it from registry.
      */
     function addEthFeed(string memory symbol, address feed) external onlyOwner {
@@ -101,7 +100,6 @@ contract ChainlinkFeedsRegistry is Ownable {
         if (b.length == 0) {
             return 0x0;
         }
-
         assembly {
             result := mload(add(s, 32))
         }

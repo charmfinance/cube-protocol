@@ -6,13 +6,13 @@ import "@openzeppelin-upgradeable/contracts/token/ERC20/ERC20Upgradeable.sol";
 
 /**
  * @title   Cube Token
- * @notice  ERC20 token representing share of a cube token pool. The share
- *          percentage will be adjusted by the pool continuously as the price
- *          of the underlying asset changes.
+ * @notice  ERC20 token representing share of a cube token pool. The pool share
+ *          will be adjusted by the pool continuously as the price of the
+ *          underlying asset changes.
  * @dev     This contract extends OpenZeppelin's ERC20 token contract with two
  *          modifications. Firstly it derives its name and symbol from the
- *          parameters given in the constructor. Secondly it allows the parent
- *          pool to mint and burn tokens.
+ *          constructor parameters. Secondly it allows the parent pool to mint
+ *          and burn tokens.
  */
 contract CubeToken is ERC20Upgradeable {
     address public cubePool;
@@ -21,10 +21,10 @@ contract CubeToken is ERC20Upgradeable {
 
     /**
      * @dev Initialize the contract. Should be called exactly once immediately
-     * after deployment. `_spotSymbol` and `_inverse` are stored for
-     * convenience and not used in this contract.
-     * @param _cubePool {CubePool} contract which is given permission to mint
-     * and burn tokens.
+     * after deployment. `_spotSymbol` and `_inverse` are stored for so that
+     * they can be read conveniently.
+     * @param _cubePool Address of {CubePool} contract which can mint and burn
+     * cube tokens.
      * @param _spotSymbol Symbol of underying ERC20 token.
      * @param _inverse True means 3x short token. False means 3x long token.
      */

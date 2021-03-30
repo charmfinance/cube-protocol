@@ -3,13 +3,13 @@
 Decentralized leveraged tokens.
 
 Cube tokens such as cubeBTC approximately track `P ^ 3`, while
-inverse cube tokens such as invBTC approximately track `1 / P ^ 3`, where P is
+inverse cube tokens such as invBTC approximately track `1 / P ^ 3`, where `P` is
 the price of BTC.
 
 Users can deposit ETH into a pool to mint cube tokens and later burn them to
-withdraw their ETH. If BTC goes up by 1%, cubeBTC's share of the pool will go up by around 3%
-and invBTC's pool share will go down by 3%. The pool shares are then normalized
-to sum to 100%.
+withdraw their ETH. If BTC goes up by 1%, cubeBTC's share of the pool will go
+up by around 3% and invBTC's pool share will go down by 3%. The pool shares are
+then normalized to sum to 100%.
 
 
 ### Owner and guardian privileges

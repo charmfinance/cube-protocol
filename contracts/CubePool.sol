@@ -18,12 +18,11 @@ import "./CubeToken.sol";
 /**
  * @title   Cube Pool
  * @notice  Parimutuel pool where users can deposit ETH to mint cube tokens
- *          and burn them to withdraw ETH. The cube token represents a share of
- *          the pool and the share percentage is adjusted by the pool
- *          continuously as the price of the underlying asset changes.
- *          Cube tokens such as cubeBTC approximately track BTC price ^ 3,
- *          while inverse cube tokens such as invBTC approximately track
- *          1 / BTC price ^ 3.
+ *          and burn them to withdraw ETH. Cube tokens represents a share of
+ *          the pool and the pool share is adjusted continuously as the price
+ *          of the underlying asset changes. Cube tokens such as cubeBTC
+ *          approximately track BTC price ^ 3, while inverse cube tokens such
+ *          as invBTC approximately track 1 / BTC price ^ 3.
  */
 contract CubePool is Ownable, ReentrancyGuard {
     using Address for address;
@@ -80,8 +79,8 @@ contract CubePool is Ownable, ReentrancyGuard {
     uint256 public accruedProtocolFees;
 
     /**
-     * @param chainlinkFeedsRegistry The feed registry contract for
-     * fetching spot prices from Chainlink oracles
+     * @param chainlinkFeedsRegistry The feed registry contract for fetching
+     * spot prices from Chainlink oracles
      */
     constructor(address chainlinkFeedsRegistry) public {
         feed = ChainlinkFeedsRegistry(chainlinkFeedsRegistry);
