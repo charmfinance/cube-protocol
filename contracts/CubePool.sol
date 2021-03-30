@@ -36,7 +36,7 @@ contract CubePool is Ownable, ReentrancyGuard {
         bool isDeposit,
         uint256 cubeTokenQuantity,
         uint256 ethAmount,
-        uint256 fees
+        uint256 protocolFees
     );
 
     event Update(CubeToken cubeToken, uint256 price);
@@ -115,10 +115,11 @@ contract CubePool is Ownable, ReentrancyGuard {
         uint256 fees = _mulFee(msg.value, _params.fee);
         uint256 ethIn = msg.value.sub(fees);
         uint256 _poolBalance = poolBalance();
-
         cubeTokensOut = _divPrice(ethIn, price, _totalEquity, _poolBalance.sub(msg.value));
         totalEquity = _totalEquity.add(cubeTokensOut.mul(price));
-        accruedProtocolFees = accruedProtocolFees.add(_mulFee(fees, protocolFee));
+
+        uint256 protocolFees = _mulFee(fees, protocolFee);
+        accruedProtocolFees = accruedProtocolFees.add(protocolFees);
         cubeToken.mint(recipient, cubeTokensOut);
 
         if (_params.maxPoolShare > 0) {
@@ -130,7 +131,7 @@ contract CubePool is Ownable, ReentrancyGuard {
             require(_poolBalance <= maxPoolBalance, "Max pool balance exceeded");
         }
 
-        emit DepositOrWithdraw(cubeToken, msg.sender, recipient, true, cubeTokensOut, msg.value, fees);
+        emit DepositOrWithdraw(cubeToken, msg.sender, recipient, true, cubeTokensOut, msg.value, protocolFees);
     }
 
     /**
@@ -155,16 +156,17 @@ contract CubePool is Ownable, ReentrancyGuard {
         _updatePrice(cubeToken, price);
 
         ethOut = _mulPrice(cubeTokensIn, price, _totalEquity, poolBalance());
-        totalEquity = _totalEquity.sub(cubeTokensIn.mul(price));
-
         uint256 fees = _mulFee(ethOut, _params.fee);
         ethOut = ethOut.sub(fees);
-        accruedProtocolFees = accruedProtocolFees.add(_mulFee(fees, protocolFee));
+        totalEquity = _totalEquity.sub(cubeTokensIn.mul(price));
+
+        uint256 protocolFees = _mulFee(fees, protocolFee);
+        accruedProtocolFees = accruedProtocolFees.add(protocolFees);
 
         cubeToken.burn(msg.sender, cubeTokensIn);
         payable(recipient).transfer(ethOut);
 
-        emit DepositOrWithdraw(cubeToken, msg.sender, recipient, false, cubeTokensIn, ethOut, fees);
+        emit DepositOrWithdraw(cubeToken, msg.sender, recipient, false, cubeTokensIn, ethOut, protocolFees);
     }
 
     /**

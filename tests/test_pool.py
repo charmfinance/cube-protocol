@@ -269,7 +269,7 @@ def test_deposit_and_withdraw(
     assert ev["isDeposit"]
     assert approx(ev["cubeTokenQuantity"]) == qty * 1e18
     assert approx(ev["ethAmount"]) == cost
-    assert approx(ev["fees"]) == cost * 0.01
+    assert approx(ev["protocolFees"]) == protocolFee * cost * 0.01
 
     (ev,) = tx.events["Update"]
     assert ev["cubeToken"] == cubebtc
@@ -317,7 +317,7 @@ def test_deposit_and_withdraw(
     assert ev["isDeposit"]
     assert approx(ev["cubeTokenQuantity"]) == qty * 1e18
     assert approx(ev["ethAmount"]) == cost
-    assert approx(ev["fees"]) == cost * 0.01
+    assert approx(ev["protocolFees"]) == protocolFee * cost * 0.01
 
     assert "Update" not in tx.events
 
@@ -368,7 +368,7 @@ def test_deposit_and_withdraw(
     assert ev["isDeposit"]
     assert approx(ev["cubeTokenQuantity"]) == qty * 1e18
     assert approx(ev["ethAmount"]) == cost
-    assert approx(ev["fees"]) == cost * 0.01
+    assert approx(ev["protocolFees"]) == protocolFee * cost * 0.01
 
     (ev,) = tx.events["Update"]
     assert ev["cubeToken"] == cubebtc
@@ -409,7 +409,7 @@ def test_deposit_and_withdraw(
     assert not ev["isDeposit"]
     assert approx(ev["cubeTokenQuantity"]) == quantity
     assert approx(float(ev["ethAmount"])) == cost
-    assert approx(float(ev["fees"])) == int(cost / 99.0)
+    assert approx(float(ev["protocolFees"])) == int(protocolFee * cost / 99.0)
 
     (ev,) = tx.events["Update"]
     assert ev["cubeToken"] == cubebtc
@@ -455,7 +455,7 @@ def test_deposit_and_withdraw(
     assert not ev["isDeposit"]
     assert approx(ev["cubeTokenQuantity"]) == quantity
     assert approx(float(ev["ethAmount"])) == cost
-    assert approx(float(ev["fees"])) == int(cost / 99.0)
+    assert approx(float(ev["protocolFees"])) == int(protocolFee * cost / 99.0)
 
     (ev,) = tx.events["Update"]
     assert ev["cubeToken"] == invbtc
