@@ -23,7 +23,7 @@ contract CubeToken is ERC20Upgradeable {
      * @dev Initialize the contract. Should be called exactly once immediately
      * after deployment. `_spotSymbol` and `_inverse` are stored for so that
      * they can be read conveniently.
-     * @param _cubePool Address of {CubePool} contract which can mint and burn
+     * @param _cubePool Address of CubePool contract which can mint and burn
      * cube tokens.
      * @param _spotSymbol Symbol of underying ERC20 token.
      * @param _inverse True means 3x short token. False means 3x long token.

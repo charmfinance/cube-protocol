@@ -14,8 +14,8 @@ import "../interfaces/AggregatorV3Interface.sol";
 
 /**
  * @title   Chainlink Feeds Registry
- * @notice  Stores Chainlink feed addresses and provides `getPrice()` to get
- *          price in USD given token symbol.
+ * @notice  Stores Chainlink feed addresses and provides getPrice() method to
+ *          get the current price of a given token in USD
  * @dev     If an X/USD feed exists, just use that. Otherwise multiply prices
  *          from X/ETH and ETH/USD feeds. For the price of USD, just return 1.
  */

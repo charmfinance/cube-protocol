@@ -75,7 +75,7 @@ def test_add_lt(
     feedsRegistry = deployer.deploy(ChainlinkFeedsRegistry)
     pool = deployer.deploy(CubePool, feedsRegistry)
 
-    with reverts("Ownable: caller is not the owner"):
+    with reverts("!governance"):
         pool.addCubeToken("BTC", LONG, {"from": alice})
 
     with reverts("Spot price should be > 0"):
@@ -462,7 +462,7 @@ def test_deposit_and_withdraw(
     assert approx(ev["price"]) == sim.prices[invbtc] / sim.initialPrices[invbtc] * 1e18
 
 
-def test_owner_methods(
+def test_governance_methods(
     a,
     CubePool,
     CubeToken,
@@ -488,7 +488,7 @@ def test_owner_methods(
     invbtc = CubeToken.at(tx.return_value)
 
     # set fee
-    with reverts("Ownable: caller is not the owner"):
+    with reverts("!governance"):
         pool.setDepositWithdrawFee(cubebtc, 100, {"from": alice})
 
     assert pool.params(cubebtc)[FEE_INDEX] == 0
@@ -507,7 +507,7 @@ def test_owner_methods(
     pool.setDepositWithdrawFee(invbtc, 100)  # 1%
 
     # set protocol fee
-    with reverts("Ownable: caller is not the owner"):
+    with reverts("!governance"):
         pool.setProtocolFee(2000, {"from": alice})
 
     assert pool.protocolFee() == 0
@@ -515,7 +515,7 @@ def test_owner_methods(
     assert pool.protocolFee() == 2000
 
     # set max tvl
-    with reverts("Ownable: caller is not the owner"):
+    with reverts("!governance"):
         pool.setMaxPoolBalance(1e18, {"from": alice})
 
     assert pool.maxPoolBalance() == 0
@@ -549,7 +549,7 @@ def test_owner_methods(
     # collect fees
     assert pool.accruedProtocolFees() == 0.2 * 7e16
 
-    with reverts("Ownable: caller is not the owner"):
+    with reverts("!governance"):
         pool.collectProtocolFees({"from": alice})
 
     balance = deployer.balance()
@@ -558,7 +558,7 @@ def test_owner_methods(
     assert pool.accruedProtocolFees() == 0
 
     # pause deposit
-    with reverts("Must be owner or guardian"):
+    with reverts("!governance and !guardian"):
         pool.setPaused(cubebtc, True, False, False, {"from": alice})
 
     pool.setPaused(cubebtc, True, False, False)
@@ -571,7 +571,7 @@ def test_owner_methods(
     pool.deposit(cubebtc, alice, {"from": alice, "value": 1e18})
 
     # pause withdraw
-    with reverts("Must be owner or guardian"):
+    with reverts("!governance and !guardian"):
         pool.setPaused(cubebtc, False, True, False, {"from": alice})
 
     pool.setPaused(cubebtc, False, True, False)
@@ -584,7 +584,7 @@ def test_owner_methods(
     pool.withdraw(cubebtc, 1e18, alice, {"from": alice})
 
     # pause price set
-    with reverts("Must be owner or guardian"):
+    with reverts("!governance and !guardian"):
         pool.setPaused(cubebtc, False, False, True, {"from": alice})
 
     pool.setPaused(cubebtc, False, False, True)
@@ -608,7 +608,7 @@ def test_owner_methods(
 
     # add guardian
     assert pool.guardian() == ZERO_ADDRESS
-    with reverts("Ownable: caller is not the owner"):
+    with reverts("!governance"):
         pool.setGuardian(alice, {"from": alice})
     pool.setGuardian(alice)
     assert pool.guardian() == alice
@@ -619,3 +619,13 @@ def test_owner_methods(
     balance = pool.poolBalance()
     alice.transfer(pool, 1e18)
     assert pool.poolBalance() - balance == 1e18
+
+    with reverts("!governance"):
+        pool.setGovernance(alice, {"from": alice})
+    pool.setGovernance(alice)
+    assert pool.governance() == deployer
+
+    with reverts("!pendingGovernance"):
+        pool.acceptGovernance({"from": bob})
+    pool.acceptGovernance({"from": alice})
+    assert pool.governance() == alice

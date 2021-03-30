@@ -2,7 +2,6 @@
 
 pragma solidity 0.6.12;
 
-import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
 import "@openzeppelin/contracts/proxy/Clones.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -24,7 +23,7 @@ import "./CubeToken.sol";
  *          approximately track BTC price ^ 3, while inverse cube tokens such
  *          as invBTC approximately track 1 / BTC price ^ 3.
  */
-contract CubePool is Ownable, ReentrancyGuard {
+contract CubePool is ReentrancyGuard {
     using Address for address;
     using SafeERC20 for IERC20;
     using SafeMath for uint256;
@@ -70,6 +69,8 @@ contract CubePool is Ownable, ReentrancyGuard {
     mapping(string => mapping(bool => CubeToken)) public cubeTokensMap;
     CubeToken[] public cubeTokens;
 
+    address public governance;
+    address public pendingGovernance;
     address public guardian;
     uint256 public protocolFee;
     uint256 public maxPoolBalance;
@@ -84,6 +85,7 @@ contract CubePool is Ownable, ReentrancyGuard {
      */
     constructor(address chainlinkFeedsRegistry) public {
         feed = ChainlinkFeedsRegistry(chainlinkFeedsRegistry);
+        governance = msg.sender;
 
         // Initialize with dummy data so that it can't be initialized again
         cubeTokenImpl.initialize(address(0), "", false);
@@ -215,12 +217,12 @@ contract CubePool is Ownable, ReentrancyGuard {
     }
 
     /**
-     * @notice Add a new cube token. Can only be called by owner
+     * @notice Add a new cube token. Can only be called by governance.
      * @param spotSymbol Symbol of underlying token. Used to fetch price from oracle
      * @param inverse True means 3x short token. False means 3x long token.
      * @return address Address of cube token that was added
      */
-    function addCubeToken(string memory spotSymbol, bool inverse) external onlyOwner returns (address) {
+    function addCubeToken(string memory spotSymbol, bool inverse) external onlyGovernance returns (address) {
         require(address(cubeTokensMap[spotSymbol][inverse]) == address(0), "Already added");
 
         bytes32 salt = keccak256(abi.encodePacked(spotSymbol, inverse));
@@ -257,7 +259,7 @@ contract CubePool is Ownable, ReentrancyGuard {
     /**
      * @notice Balance of ETH in this contract that belongs to cube token
      * holders. The remaining ETH are the accrued protocol fees that can be
-     * collected by the owner.
+     * collected by governance.
      */
     function poolBalance() public view returns (uint256) {
         return address(this).balance.sub(accruedProtocolFees);
@@ -355,8 +357,8 @@ contract CubePool is Ownable, ReentrancyGuard {
     /**
      * @notice Collect protocol fees accrued so far.
      */
-    function collectProtocolFees() external onlyOwner {
-        payable(owner()).transfer(accruedProtocolFees);
+    function collectProtocolFees() external onlyGovernance {
+        payable(governance).transfer(accruedProtocolFees);
         accruedProtocolFees = 0;
     }
 
@@ -365,7 +367,7 @@ contract CubePool is Ownable, ReentrancyGuard {
      * go to the protocol. For example a value of 2000 means 20% of fees go to
      * the protocol and 80% go back into the pool.
      */
-    function setProtocolFee(uint256 _protocolFee) external onlyOwner {
+    function setProtocolFee(uint256 _protocolFee) external onlyGovernance {
         require(_protocolFee <= 1e4, "Protocol fee should be <= 100%");
         protocolFee = _protocolFee;
     }
@@ -377,7 +379,7 @@ contract CubePool is Ownable, ReentrancyGuard {
      * @dev Theoretically this fee should be at least 3x the max deviation in
      * the underlying Chainlink feed to avoid technical frontrunning.
      */
-    function setDepositWithdrawFee(CubeToken cubeToken, uint256 fee) external onlyOwner {
+    function setDepositWithdrawFee(CubeToken cubeToken, uint256 fee) external onlyGovernance {
         require(params[cubeToken].added, "Not added");
         require(fee < 1e4, "Fee should be < 100%");
         params[cubeToken].fee = fee;
@@ -389,7 +391,7 @@ contract CubePool is Ownable, ReentrancyGuard {
      * with limited upside, as well as protecting the whole pool from the
      * volatility of a single asset.
      */
-    function setMaxPoolShare(CubeToken cubeToken, uint256 maxPoolShare) external onlyOwner {
+    function setMaxPoolShare(CubeToken cubeToken, uint256 maxPoolShare) external onlyGovernance {
         require(params[cubeToken].added, "Not added");
         require(maxPoolShare < 1e4, "Max pool share should be < 100%");
         params[cubeToken].maxPoolShare = maxPoolShare;
@@ -400,8 +402,25 @@ contract CubePool is Ownable, ReentrancyGuard {
      * the ETH balance deposited in the pool excluding accrued protocol fees.
      * A value of 0 means no limit.
      */
-    function setMaxPoolBalance(uint256 _maxPoolBalance) external onlyOwner {
+    function setMaxPoolBalance(uint256 _maxPoolBalance) external onlyGovernance {
         maxPoolBalance = _maxPoolBalance;
+    }
+
+    /**
+     * @notice Governance address is not update until the new governance
+     * address has called acceptGovernance() to accept this responsibility.
+     */
+    function setGovernance(address _governance) external onlyGovernance {
+        pendingGovernance = _governance;
+    }
+
+    /**
+     * @notice setGovernance() should be called by the existing governance
+     * address prior to calling this function.
+     */
+    function acceptGovernance() external {
+        require(msg.sender == pendingGovernance, "!pendingGovernance");
+        governance = msg.sender;
     }
 
     /**
@@ -409,7 +428,7 @@ contract CubePool is Ownable, ReentrancyGuard {
      * and unpause trading and to emergency withdraw. These protections are
      * needed for example to protect funds if there is an oracle mispricing.
      */
-    function setGuardian(address _guardian) external onlyOwner {
+    function setGuardian(address _guardian) external onlyGovernance {
         guardian = _guardian;
     }
 
@@ -421,8 +440,7 @@ contract CubePool is Ownable, ReentrancyGuard {
         bool depositPaused,
         bool withdrawPaused,
         bool updatePaused
-    ) public {
-        require(msg.sender == owner() || msg.sender == guardian, "Must be owner or guardian");
+    ) public onlyGovernanceOrGuardian {
         require(params[cubeToken].added, "Not added");
         params[cubeToken].depositPaused = depositPaused;
         params[cubeToken].withdrawPaused = withdrawPaused;
@@ -436,8 +454,7 @@ contract CubePool is Ownable, ReentrancyGuard {
         bool depositPaused,
         bool withdrawPaused,
         bool updatePaused
-    ) external {
-        require(msg.sender == owner() || msg.sender == guardian, "Must be owner or guardian");
+    ) external onlyGovernanceOrGuardian {
         for (uint256 i = 0; i < cubeTokens.length; i = i.add(1)) {
             setPaused(cubeTokens[i], depositPaused, withdrawPaused, updatePaused);
         }
@@ -446,19 +463,28 @@ contract CubePool is Ownable, ReentrancyGuard {
     /**
      * @notice Renounce emergency withdraw powers
      */
-    function finalize() external onlyOwner {
+    function finalize() external onlyGovernance {
         require(!finalized, "Already finalized");
         finalized = true;
     }
 
     /**
-     * @notice Transfer all ETH to owner in case of emergency. Cannot be called
+     * @notice Transfer all ETH to governance in case of emergency. Cannot be called
      * if already finalized
      */
-    function emergencyWithdraw() external {
-        require(msg.sender == owner() || msg.sender == guardian, "Must be owner or guardian");
+    function emergencyWithdraw() external onlyGovernanceOrGuardian {
         require(!finalized, "Finalized");
-        payable(owner()).transfer(address(this).balance);
+        payable(governance).transfer(address(this).balance);
+    }
+
+    modifier onlyGovernance {
+        require(msg.sender == governance, "!governance");
+        _;
+    }
+
+    modifier onlyGovernanceOrGuardian {
+        require(msg.sender == governance || msg.sender == guardian, "!governance and !guardian");
+        _;
     }
 
     receive() external payable {}
