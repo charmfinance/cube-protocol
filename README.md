@@ -70,7 +70,8 @@ Run unit tests
 brownie test
 ```
 
-Run keeper script
+Run keeper script. You need to set up a brownie account and set environment
+variables `KEEPER_ACCOUNT`, `KEEPER_PW` and `WEB3_INFURA_PROJECT_ID`
 ```
 brownie run keep
 ```
