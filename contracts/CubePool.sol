@@ -207,7 +207,7 @@ contract CubePool is ReentrancyGuard {
      * `maxStaleTime` seconds. Should be called periodically by an external
      * keeper so that the total equity doesn't get too far out of sync.
      */
-    function updateAll(uint256 maxStaleTime) public {
+    function updateAll(uint256 maxStaleTime) external {
         for (uint256 i = 0; i < cubeTokens.length; i = i.add(1)) {
             CubeToken cubeToken = cubeTokens[i];
             if (params[cubeToken].lastUpdated.add(maxStaleTime) <= block.timestamp) {
@@ -269,7 +269,7 @@ contract CubePool is ReentrancyGuard {
      * @notice Calculate price of a cube token in ETH multiplied by 1e18,
      * excluding fees. This price applies to both depositing and withdrawing.
      */
-    function quote(CubeToken cubeToken) public view returns (uint256) {
+    function quote(CubeToken cubeToken) external view returns (uint256) {
         (uint256 price, uint256 _totalEquity) = _priceAndTotalEquity(cubeToken);
         return _mulPrice(1e18, price, _totalEquity, poolBalance());
     }
