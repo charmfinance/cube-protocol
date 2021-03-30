@@ -177,6 +177,9 @@ def test_add_lt(
     with reverts("Already added"):
         pool.addCubeToken("BTC", LONG)
 
+    assert pool.poolBalance() == 0
+    assert pool.totalEquity() == 0
+
 
 @pytest.mark.parametrize("px1,px2", [(50000, 40000), (1e8, 1e7), (1, 1e1)])
 @pytest.mark.parametrize("qty", [1, 1e-5, 10])

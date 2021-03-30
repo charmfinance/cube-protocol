@@ -169,9 +169,10 @@ contract CubePool is Ownable, ReentrancyGuard {
 
     /**
      * @notice Update the stored cube token price and total equity. This is
-     * automatically called when the cube token is minted or burned. However
-     * if it has not been traded for a while, it should be called periodically
-     * so that the total equity does get too far out of sync
+     * automatically called whenever there's a deposit or withdrawal for this
+     * cube token. However if this hasn't happened for a while, this method
+     * should be called by an external keeper so that the total equity doesn't
+     * get too far out of sync.
      */
     function update(CubeToken cubeToken) public {
         CubeTokenParams storage _params = params[cubeToken];
@@ -186,7 +187,7 @@ contract CubePool is Ownable, ReentrancyGuard {
 
     /**
      * @dev Update `lastPrice` and `lastUpdated` in params. Should be called
-     * whenever a price from oracle changes.
+     * whenever a new price is fetched from the oracle.
      */
     function _updatePrice(CubeToken cubeToken, uint256 price) internal {
         CubeTokenParams storage _params = params[cubeToken];
@@ -198,8 +199,9 @@ contract CubePool is Ownable, ReentrancyGuard {
     }
 
     /**
-     * @notice Update all cube tokens which haven't been update in the last
-     * `maxStaleTime` seconds
+     * @notice Update all cube tokens which haven't been updated in the last
+     * `maxStaleTime` seconds. Should be called periodically by an external
+     * keeper so that the total equity doesn't get too far out of sync.
      */
     function updateAll(uint256 maxStaleTime) public {
         for (uint256 i = 0; i < cubeTokens.length; i = i.add(1)) {
@@ -224,6 +226,9 @@ contract CubePool is Ownable, ReentrancyGuard {
         cubeToken.initialize(address(this), spotSymbol, inverse);
 
         bytes32 currencyKey = feed.stringToBytes32(spotSymbol);
+        uint256 spot = feed.getPrice(currencyKey);
+        require(spot > 0, "Spot price should be > 0");
+
         params[cubeToken] = CubeTokenParams({
             currencyKey: currencyKey,
             inverse: inverse,
@@ -233,17 +238,14 @@ contract CubePool is Ownable, ReentrancyGuard {
             added: true,
             fee: 0,
             maxPoolShare: 0,
-            initialSpotPrice: 0,
+            initialSpotPrice: spot,
             lastPrice: 0,
             lastUpdated: 0
         });
         cubeTokensMap[spotSymbol][inverse] = cubeToken;
         cubeTokens.push(cubeToken);
 
-        uint256 spot = feed.getPrice(currencyKey);
-        require(spot > 0, "Spot price should be > 0");
-
-        params[cubeToken].initialSpotPrice = spot;
+        // Set `lastPrice` and `lastUpdated`
         update(cubeToken);
 
         emit AddCubeToken(cubeToken, spotSymbol, inverse, currencyKey, spot);
@@ -251,18 +253,17 @@ contract CubePool is Ownable, ReentrancyGuard {
     }
 
     /**
-     * @notice ETH in this contract that belongs to cube token holders. The
-     * remaining ETH are the accumulated fees that can be collected by the
-     * owner.
+     * @notice Balance of ETH in this contract that belongs to cube token
+     * holders. The remaining ETH are the accrued protocol fees that can be
+     * collected by the owner.
      */
     function poolBalance() public view returns (uint256) {
         return address(this).balance.sub(accruedProtocolFees);
     }
 
     /**
-     * @notice Calculate price of a cube token in ETH, multiplied by 1e18
-     * excluding fees. Note that this price applies to both depositing and
-     * withdrawing.
+     * @notice Calculate price of a cube token in ETH multiplied by 1e18,
+     * excluding fees. This price applies to both depositing and withdrawing.
      */
     function quote(CubeToken cubeToken) public view returns (uint256) {
         (uint256 price, uint256 _totalEquity) = _priceAndTotalEquity(cubeToken);
@@ -349,6 +350,9 @@ contract CubePool is Ownable, ReentrancyGuard {
         return amount.mul(fee).div(1e4);
     }
 
+    /**
+     * @notice Collect protocol fees accrued so far.
+     */
     function collectProtocolFees() external onlyOwner {
         payable(owner()).transfer(accruedProtocolFees);
         accruedProtocolFees = 0;
@@ -356,7 +360,8 @@ contract CubePool is Ownable, ReentrancyGuard {
 
     /**
      * @notice Set protocol fee in basis points. This is the cut of fees that
-     * go to the protocol.
+     * go to the protocol. For example a value of 2000 means 20% of fees go to
+     * the protocol and 80% go back into the pool.
      */
     function setProtocolFee(uint256 _protocolFee) external onlyOwner {
         require(_protocolFee <= 1e4, "Protocol fee should be <= 100%");
@@ -365,7 +370,10 @@ contract CubePool is Ownable, ReentrancyGuard {
 
     /**
      * @notice Set fee in basis points charged on each deposit and withdrawal.
-     * For example a value of 100 means a 1% fee.
+     * For example a value of 150 means a 1.5% fee. Some of this fee goes to
+     * the protocol while the rest goes back into the pool.
+     * @dev Theoretically this fee should be at least 3x the max deviation in
+     * the underlying Chainlink feed to avoid technical frontrunning.
      */
     function setDepositWithdrawFee(CubeToken cubeToken, uint256 fee) external onlyOwner {
         require(params[cubeToken].added, "Not added");
@@ -386,18 +394,18 @@ contract CubePool is Ownable, ReentrancyGuard {
     }
 
     /**
-     * @notice Set max pool balance for a guarded launch. A value of 0 means no
-     * limit
+     * @notice Set max pool balance for a guarded launch. This is a limit for
+     * the ETH balance deposited in the pool excluding accrued protocol fees.
+     * A value of 0 means no limit.
      */
     function setMaxPoolBalance(uint256 _maxPoolBalance) external onlyOwner {
         maxPoolBalance = _maxPoolBalance;
     }
 
     /**
-     * @notice Set guardian. This is a trusted account which has the powers
-     * to pause and unpause trading and to emergency withdraw. These
-     * protections are needed for example to protect funds if there is an
-     * oracle mispricing.
+     * @notice Set guardian. This is a trusted account with the powers to pause
+     * and unpause trading and to emergency withdraw. These protections are
+     * needed for example to protect funds if there is an oracle mispricing.
      */
     function setGuardian(address _guardian) external onlyOwner {
         guardian = _guardian;
