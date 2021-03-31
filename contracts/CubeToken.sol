@@ -33,9 +33,9 @@ contract CubeToken is ERC20Upgradeable {
         string memory _spotSymbol,
         bool _inverse
     ) external initializer {
-        // Example name: Charm 3X Long BTC
+        // Example name: 3X Long BTC
         // Example symbol: cubeBTC
-        string memory name = string(abi.encodePacked("Charm 3X ", _inverse ? "Short " : "Long ", _spotSymbol));
+        string memory name = string(abi.encodePacked("3X ", _inverse ? "Short " : "Long ", _spotSymbol));
         string memory symbol = string(abi.encodePacked(_inverse ? "inv" : "cube", _spotSymbol));
         __ERC20_init(name, symbol);
 

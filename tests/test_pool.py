@@ -96,7 +96,7 @@ def test_add_lt(
     tx = pool.addCubeToken("BTC", LONG)
 
     cubebtc = CubeToken.at(tx.return_value)
-    assert cubebtc.name() == "Charm 3X Long BTC"
+    assert cubebtc.name() == "3X Long BTC"
     assert cubebtc.symbol() == "cubeBTC"
     assert pool.numCubeTokens() == 1
     assert pool.cubeTokens(0) == cubebtc
@@ -135,7 +135,7 @@ def test_add_lt(
     tx = pool.addCubeToken("BTC", SHORT)
 
     invbtc = CubeToken.at(tx.return_value)
-    assert invbtc.name() == "Charm 3X Short BTC"
+    assert invbtc.name() == "3X Short BTC"
     assert invbtc.symbol() == "invBTC"
     assert pool.numCubeTokens() == 2
     assert pool.cubeTokens(1) == invbtc
