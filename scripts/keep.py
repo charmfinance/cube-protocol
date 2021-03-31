@@ -1,11 +1,12 @@
 from brownie import CubePool, accounts
+from brownie.network.gas.strategies import GasNowScalingStrategy
 import os
 
 
 # POOL = "0xdB712E99B24ed9409a8c696Dc321760d4631bF7c"
 POOL = "0xd96f154976f4FE8EC168d0dAdd50B68A81DC6dce"
 
-MAX_STALE_TIME = 3600
+MAX_STALE_TIME = 30 * 60
 
 
 def getAccount(account, pw):
@@ -19,9 +20,12 @@ def main():
     keeper = getAccount(os.environ["KEEPER_ACCOUNT"], os.environ["KEEPER_PW"])
     # keeper = accounts.load(input("Brownie account: "))
 
+    gas_strategy = GasNowScalingStrategy()
+
     balance = keeper.balance()
 
     pool = CubePool.at(POOL)
-    pool.updateAll(MAX_STALE_TIME, {"from": keeper})
+    pool.updateAll(MAX_STALE_TIME, {"from": keeper, "gas_price": gas_strategy})
 
     print(f"Gas used: {(balance - keeper.balance()) / 1e18:.4f} ETH")
+    print(f"New balance: {keeper.balance() / 1e18:.4f} ETH")
