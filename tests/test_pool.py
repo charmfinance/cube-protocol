@@ -350,9 +350,7 @@ def test_deposit_and_withdraw(
 
     (ev,) = tx.events["Update"]
     assert ev["cubeToken"] == invbtc
-    assert (
-        approx(ev["price"]) == sim.prices[invbtc] / sim.initialPrices[invbtc] * 1e18
-    )
+    assert approx(ev["price"]) == sim.prices[invbtc] / sim.initialPrices[invbtc] * 1e18
 
     # check btc bull token price
     assert approx(pool.quote(cubebtc)) == sim.price(cubebtc) * 1e18
@@ -425,27 +423,32 @@ def test_deposit_and_withdraw(
 
     assert "Update" not in tx.events
 
+    # can't withdraw all
+    quantity = invbtc.balanceOf(alice)
+    with reverts("Min total equity exceeded"):
+        pool.withdraw(invbtc, quantity, bob, {"from": alice})
+
     # check btc bear token price
     quantity = invbtc.balanceOf(alice)
     px = sim.price(invbtc) * 1e18
-    cost = sim.withdraw(invbtc, quantity / 1e18)
-    assert approx(pool.quoteWithdraw(invbtc, quantity)) == cost
+    cost = sim.withdraw(invbtc, 0.9 * quantity / 1e18)
+    assert approx(pool.quoteWithdraw(invbtc, 0.9 * quantity)) == cost
     assert approx(pool.quote(invbtc)) == px
 
     # withdraw 1 btc bear token
     bobBalance = bob.balance()
     poolBalance = pool.balance()
-    tx = pool.withdraw(invbtc, quantity, bob, {"from": alice})
+    tx = pool.withdraw(invbtc, 0.9 * quantity, bob, {"from": alice})
     assert approx(tx.return_value) == cost
     assert approx(bob.balance() - bobBalance) == cost
     assert approx(poolBalance - pool.balance()) == cost
-    assert approx(invbtc.balanceOf(alice)) == 0
+    assert approx(invbtc.balanceOf(alice)) == 0.1 * quantity
     assert approx(pool.balance()) == sim.balance
     assert (
         approx(pool.poolBalance() / poolBalance, rel=1e-4)
         == sim.poolBalance / poolBalance
     )  # divide by prev to fix rounding
-    assert approx(pool.totalEquity()) == 0
+    assert approx(pool.totalEquity(), rel=1e-5) == sim.totalEquity()
     assert (
         approx(pool.params(invbtc)[LAST_PRICE_INDEX])
         == sim.prices[invbtc] / sim.initialPrices[invbtc] * 1e18
@@ -458,7 +461,7 @@ def test_deposit_and_withdraw(
     assert ev["sender"] == alice
     assert ev["recipient"] == bob
     assert not ev["isDeposit"]
-    assert approx(ev["cubeTokenQuantity"]) == quantity
+    assert approx(ev["cubeTokenQuantity"]) == 0.9 * quantity
     assert approx(float(ev["ethAmount"])) == cost
     assert approx(float(ev["protocolFees"])) == int(protocolFee * cost / 99.0)
 
@@ -592,16 +595,25 @@ def test_governance_methods(
 
     pool.setPaused(cubebtc, False, False, True)
 
+    # doesn't update because paused
     t = pool.params(cubebtc)[LAST_UPDATED_INDEX]
     chain.sleep(1)
     pool.update(cubebtc, {"from": alice})
     assert pool.params(cubebtc)[LAST_UPDATED_INDEX] == t
 
+    # doesn't update because no price change
+    t = pool.params(invbtc)[LAST_UPDATED_INDEX]
+    chain.sleep(1)
+    pool.update(invbtc, {"from": alice})
+    assert pool.params(invbtc)[LAST_UPDATED_INDEX] == t
+
+    btcusd.setPrice(60000 * 1e8)
     t = pool.params(invbtc)[LAST_UPDATED_INDEX]
     chain.sleep(1)
     pool.update(invbtc, {"from": alice})
     assert pool.params(invbtc)[LAST_UPDATED_INDEX] > t
 
+    # unpause
     pool.setPaused(cubebtc, False, False, False)
 
     t = pool.params(cubebtc)[LAST_UPDATED_INDEX]

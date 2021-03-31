@@ -62,6 +62,8 @@ contract CubePool is ReentrancyGuard {
         uint256 lastUpdated;
     }
 
+    uint256 public constant MIN_TOTAL_EQUITY = 1000;
+
     ChainlinkFeedsRegistry public immutable feed;
     CubeToken public cubeTokenImpl = new CubeToken();
 
@@ -160,7 +162,13 @@ contract CubePool is ReentrancyGuard {
         ethOut = _mulPrice(cubeTokensIn, price, _totalEquity, poolBalance());
         uint256 fees = _mulFee(ethOut, _params.fee);
         ethOut = ethOut.sub(fees);
-        totalEquity = _totalEquity.sub(cubeTokensIn.mul(price));
+
+        // Make sure pool size isn't too small, otherwise there could be
+        // rounding issues. Check total equity instead of pool balance since
+        // pool balance is increased again by fees going back into pool.
+        _totalEquity = _totalEquity.sub(cubeTokensIn.mul(price));
+        require(_totalEquity >= MIN_TOTAL_EQUITY, "Min total equity exceeded");
+        totalEquity = _totalEquity;
 
         uint256 protocolFees = _mulFee(fees, protocolFee);
         accruedProtocolFees = accruedProtocolFees.add(protocolFees);
@@ -191,7 +199,8 @@ contract CubePool is ReentrancyGuard {
 
     /**
      * @dev Update `lastPrice` and `lastUpdated` in params. Should be called
-     * whenever a new price is fetched from the oracle.
+     * whenever a new price is fetched from the oracle. Doesn't update if price
+     * updates are paused or if price hasn't changed.
      */
     function _updatePrice(CubeToken cubeToken, uint256 price) internal {
         CubeTokenParams storage _params = params[cubeToken];
