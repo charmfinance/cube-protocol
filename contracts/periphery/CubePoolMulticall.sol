@@ -6,6 +6,10 @@ import "../CubePool.sol";
 import "../CubeToken.sol";
 
 
+/**
+ * @title   Cube Pool Multicall
+ * @notice  Used by frontend to fetch cube pool data more conveniently
+ */
 contract CubePoolMulticall is Ownable, ReentrancyGuard {
     function allCubeTokens(CubePool pool) external view returns (CubeToken[] memory cubeTokens) {
         uint256 n = pool.numCubeTokens();
