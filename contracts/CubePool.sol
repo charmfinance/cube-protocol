@@ -195,7 +195,7 @@ contract CubePool is ReentrancyGuard {
      */
     function _updatePrice(CubeToken cubeToken, uint256 price) internal {
         CubeTokenParams storage _params = params[cubeToken];
-        if (!_params.updatePaused) {
+        if (!_params.updatePaused && price != _params.lastPrice) {
             _params.lastPrice = price;
             _params.lastUpdated = block.timestamp;
             emit Update(cubeToken, price);
@@ -251,6 +251,8 @@ contract CubePool is ReentrancyGuard {
 
         // Set `lastPrice` and `lastUpdated`
         update(cubeToken);
+        assert(params[cubeToken].lastPrice > 0);
+        assert(params[cubeToken].lastUpdated > 0);
 
         emit AddCubeToken(cubeToken, spotSymbol, inverse, currencyKey, spot);
         return address(cubeToken);
@@ -323,10 +325,13 @@ contract CubePool is ReentrancyGuard {
         // total supply * price over all cube tokens. Therefore, when the price
         // of a cube token with total supply T changes from P1 to P2, the total
         // equity needs to be increased by T * P2 - T * P1.
-        uint256 _totalSupply = cubeToken.totalSupply();
-        uint256 equityBefore = _params.lastPrice.mul(_totalSupply);
-        uint256 equityAfter = price.mul(_totalSupply);
-        _totalEquity = totalEquity.add(equityAfter).sub(equityBefore);
+        _totalEquity = totalEquity;
+        if (price != _params.lastPrice) {
+            uint256 _totalSupply = cubeToken.totalSupply();
+            uint256 equityBefore = _params.lastPrice.mul(_totalSupply);
+            uint256 equityAfter = price.mul(_totalSupply);
+            _totalEquity = _totalEquity.add(equityAfter).sub(equityBefore);
+        }
     }
 
     /// @dev Multiply cube token quantity by price and normalize to get ETH cost
