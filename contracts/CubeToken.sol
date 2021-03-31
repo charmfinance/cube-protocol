@@ -6,10 +6,9 @@ import "@openzeppelin-upgradeable/contracts/token/ERC20/ERC20Upgradeable.sol";
 
 /**
  * @title   Cube Token
- * @notice  ERC20 token representing share of a cube token pool. The pool share
- *          will be adjusted by the pool continuously as the price of the
- *          underlying asset changes.
- * @dev     This contract extends OpenZeppelin's ERC20 token contract with two
+ * @notice  ERC20 token representing share of a cube token pool.
+ * @dev     The logic for pricing and trading these tokens is in CubePool.
+ *          This contract extends OpenZeppelin's ERC20 token contract with two
  *          modifications. Firstly it derives its name and symbol from the
  *          constructor parameters. Secondly it allows the parent pool to mint
  *          and burn tokens.
