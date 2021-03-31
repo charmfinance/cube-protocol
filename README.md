@@ -12,11 +12,11 @@ up by around 3% and invBTC's pool share will go down by 3%. The pool shares are
 then normalized to sum to 100%.
 
 
-### Owner and guardian privileges
+### Governance and guardian privileges
 
-There are two privileged accounts for each pool: an owner and a guardian.
+There are two privileged accounts for each pool: governance and a guardian.
 
-The **owner** can:
+The **governance** account can:
 
 - Change max pool share of each cube token
 
@@ -26,7 +26,7 @@ The **owner** can:
 
 - Change trading fee
 
-Both the **owner** and the **guardian** can:
+Both **governance** and the **guardian** can:
 
 - Emergency withdraw all ETH from the contract to the owner. This power can later be
   revoked if the owner calls `finalize()`. This is intended to be used in the
