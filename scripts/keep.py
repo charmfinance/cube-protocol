@@ -3,8 +3,7 @@ from brownie.network.gas.strategies import GasNowScalingStrategy
 import os
 
 
-# POOL = "0xdB712E99B24ed9409a8c696Dc321760d4631bF7c"
-POOL = "0xd96f154976f4FE8EC168d0dAdd50B68A81DC6dce"
+POOL = "0x23F6A2D8d691294c3A1144EeD14F5632e8bc1B67"
 
 MAX_STALE_TIME = 30 * 60
 
