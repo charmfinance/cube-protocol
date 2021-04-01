@@ -73,7 +73,8 @@ def test_add_lt(
 
     # deploy pool
     feedsRegistry = deployer.deploy(ChainlinkFeedsRegistry)
-    pool = deployer.deploy(CubePool, feedsRegistry)
+    cubeTokenImpl = deployer.deploy(CubeToken)
+    pool = deployer.deploy(CubePool, feedsRegistry, cubeTokenImpl)
 
     with reverts("!governance"):
         pool.addCubeToken("BTC", LONG, 0, 0, {"from": alice})
@@ -210,7 +211,8 @@ def test_deposit_and_withdraw(
 
     # deploy pool
     feedsRegistry = deployer.deploy(ChainlinkFeedsRegistry)
-    pool = deployer.deploy(CubePool, feedsRegistry)
+    cubeTokenImpl = deployer.deploy(CubeToken)
+    pool = deployer.deploy(CubePool, feedsRegistry, cubeTokenImpl)
 
     btcusd = deployer.deploy(MockAggregatorV3Interface)
     btcusd.setPrice(px1 * 1e8)
@@ -480,7 +482,8 @@ def test_governance_methods(
 
     # deploy pool
     feedsRegistry = deployer.deploy(ChainlinkFeedsRegistry)
-    pool = deployer.deploy(CubePool, feedsRegistry)
+    cubeTokenImpl = deployer.deploy(CubeToken)
+    pool = deployer.deploy(CubePool, feedsRegistry, cubeTokenImpl)
 
     btcusd = deployer.deploy(MockAggregatorV3Interface)
     btcusd.setPrice(50000 * 1e8)

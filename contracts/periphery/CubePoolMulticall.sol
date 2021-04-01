@@ -29,7 +29,7 @@ contract CubePoolMulticall is Ownable, ReentrancyGuard {
             uint256 balance,
             uint256 price,
             uint256 spotPrice,
-            uint256 fee,
+            uint256 depositWithdrawFee,
             uint256 maxPoolShare,
             bool depositPaused,
             bool withdrawPaused,
@@ -49,13 +49,13 @@ contract CubePoolMulticall is Ownable, ReentrancyGuard {
             withdrawPaused,
             updatePaused,
             ,
-            fee,
+            depositWithdrawFee,
             maxPoolShare,
             ,
             ,
         ) = pool.params(cubeToken);
 
         price = pool.quote(cubeToken);
-        spotPrice = pool.feed().getPrice(currencyKey);
+        spotPrice = pool.feedsRegistry().getPrice(currencyKey);
     }
 }

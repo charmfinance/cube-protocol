@@ -64,8 +64,8 @@ contract CubePool is ReentrancyGuard {
 
     uint256 public constant MIN_TOTAL_EQUITY = 1000;
 
-    ChainlinkFeedsRegistry public immutable feed;
-    CubeToken public cubeTokenImpl = new CubeToken();
+    ChainlinkFeedsRegistry public immutable feedsRegistry;
+    CubeToken public immutable cubeTokenImpl;
 
     mapping(CubeToken => CubeTokenParams) public params;
     mapping(string => mapping(bool => CubeToken)) public cubeTokensMap;
@@ -82,15 +82,15 @@ contract CubePool is ReentrancyGuard {
     uint256 public accruedProtocolFees;
 
     /**
-     * @param chainlinkFeedsRegistry The feed registry contract for fetching
-     * spot prices from Chainlink oracles
+     * @param _feedsRegistry The feed registry contract for fetching spot
+     * prices from Chainlink oracles
+     * @param _cubeTokenImpl Cube token template to be cloned when new cube
+     * tokens are added
      */
-    constructor(address chainlinkFeedsRegistry) public {
-        feed = ChainlinkFeedsRegistry(chainlinkFeedsRegistry);
+    constructor(address _feedsRegistry, address _cubeTokenImpl) public {
+        feedsRegistry = ChainlinkFeedsRegistry(_feedsRegistry);
+        cubeTokenImpl = CubeToken(_cubeTokenImpl);
         governance = msg.sender;
-
-        // Initialize with dummy data so that it can't be initialized again
-        cubeTokenImpl.initialize(address(0), "", false);
     }
 
     /**
@@ -227,8 +227,10 @@ contract CubePool is ReentrancyGuard {
 
     /**
      * @notice Add a new cube token. Can only be called by governance.
-     * @param spotSymbol Symbol of underlying token. Used to fetch price from oracle
+     * @param spotSymbol Symbol of underlying token. Used to fetch oracle price
      * @param inverse True means 3x short token. False means 3x long token.
+     * @param depositWithdrawFee Fee on deposits and withdrawals in basis points
+     * @param maxPoolShare Limit on share of the pool in basis points
      * @return address Address of cube token that was added
      */
     function addCubeToken(
@@ -243,8 +245,8 @@ contract CubePool is ReentrancyGuard {
         CubeToken cubeToken = CubeToken(Clones.cloneDeterministic(address(cubeTokenImpl), salt));
         cubeToken.initialize(address(this), spotSymbol, inverse);
 
-        bytes32 currencyKey = feed.stringToBytes32(spotSymbol);
-        uint256 spot = feed.getPrice(currencyKey);
+        bytes32 currencyKey = feedsRegistry.stringToBytes32(spotSymbol);
+        uint256 spot = feedsRegistry.getPrice(currencyKey);
         require(spot > 0, "Spot price should be > 0");
 
         params[cubeToken] = CubeTokenParams({
@@ -321,7 +323,7 @@ contract CubePool is ReentrancyGuard {
             return (_params.lastPrice, totalEquity);
         }
 
-        uint256 spot = feed.getPrice(_params.currencyKey);
+        uint256 spot = feedsRegistry.getPrice(_params.currencyKey);
 
         // Divide by the spot price at the time the cube token was added.
         // This helps the price not be too large or small which could cause
