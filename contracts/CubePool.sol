@@ -55,7 +55,7 @@ contract CubePool is ReentrancyGuard {
         bool withdrawPaused;
         bool updatePaused;
         bool added; // always true
-        uint256 fee;
+        uint256 depositWithdrawFee;
         uint256 maxPoolShare;
         uint256 initialSpotPrice;
         uint256 lastPrice;
@@ -116,7 +116,7 @@ contract CubePool is ReentrancyGuard {
         (uint256 price, uint256 _totalEquity) = _priceAndTotalEquity(cubeToken);
         _updatePrice(cubeToken, price);
 
-        uint256 fees = _mulFee(msg.value, _params.fee);
+        uint256 fees = _mulFee(msg.value, _params.depositWithdrawFee);
         uint256 ethIn = msg.value.sub(fees);
         uint256 _poolBalance = poolBalance();
         cubeTokensOut = _divPrice(ethIn, price, _totalEquity, _poolBalance.sub(msg.value));
@@ -160,7 +160,7 @@ contract CubePool is ReentrancyGuard {
         _updatePrice(cubeToken, price);
 
         ethOut = _mulPrice(cubeTokensIn, price, _totalEquity, poolBalance());
-        uint256 fees = _mulFee(ethOut, _params.fee);
+        uint256 fees = _mulFee(ethOut, _params.depositWithdrawFee);
         ethOut = ethOut.sub(fees);
 
         // Make sure pool size isn't too small, otherwise there could be
@@ -231,7 +231,12 @@ contract CubePool is ReentrancyGuard {
      * @param inverse True means 3x short token. False means 3x long token.
      * @return address Address of cube token that was added
      */
-    function addCubeToken(string memory spotSymbol, bool inverse) external onlyGovernance returns (address) {
+    function addCubeToken(
+        string memory spotSymbol,
+        bool inverse,
+        uint256 depositWithdrawFee,
+        uint256 maxPoolShare
+    ) external onlyGovernance returns (address) {
         require(address(cubeTokensMap[spotSymbol][inverse]) == address(0), "Already added");
 
         bytes32 salt = keccak256(abi.encodePacked(spotSymbol, inverse));
@@ -249,8 +254,8 @@ contract CubePool is ReentrancyGuard {
             withdrawPaused: false,
             updatePaused: false,
             added: true,
-            fee: 0,
-            maxPoolShare: 0,
+            depositWithdrawFee: depositWithdrawFee,
+            maxPoolShare: maxPoolShare,
             initialSpotPrice: spot,
             lastPrice: 0,
             lastUpdated: 0
@@ -291,7 +296,7 @@ contract CubePool is ReentrancyGuard {
      */
     function quoteDeposit(CubeToken cubeToken, uint256 ethIn) external view returns (uint256) {
         (uint256 price, uint256 _totalEquity) = _priceAndTotalEquity(cubeToken);
-        uint256 fees = _mulFee(ethIn, params[cubeToken].fee);
+        uint256 fees = _mulFee(ethIn, params[cubeToken].depositWithdrawFee);
         return _divPrice(ethIn.sub(fees), price, _totalEquity, poolBalance());
     }
 
@@ -301,7 +306,7 @@ contract CubePool is ReentrancyGuard {
     function quoteWithdraw(CubeToken cubeToken, uint256 cubeTokensIn) external view returns (uint256) {
         (uint256 price, uint256 _totalEquity) = _priceAndTotalEquity(cubeToken);
         uint256 ethOut = _mulPrice(cubeTokensIn, price, _totalEquity, poolBalance());
-        uint256 fees = _mulFee(ethOut, params[cubeToken].fee);
+        uint256 fees = _mulFee(ethOut, params[cubeToken].depositWithdrawFee);
         return ethOut.sub(fees);
     }
 
@@ -393,10 +398,10 @@ contract CubePool is ReentrancyGuard {
      * @dev Theoretically this fee should be at least 3x the max deviation in
      * the underlying Chainlink feed to avoid technical frontrunning.
      */
-    function setDepositWithdrawFee(CubeToken cubeToken, uint256 fee) external onlyGovernance {
+    function setDepositWithdrawFee(CubeToken cubeToken, uint256 depositWithdrawFee) external onlyGovernance {
         require(params[cubeToken].added, "Not added");
-        require(fee < 1e4, "Fee should be < 100%");
-        params[cubeToken].fee = fee;
+        require(depositWithdrawFee < 1e4, "Fee should be < 100%");
+        params[cubeToken].depositWithdrawFee = depositWithdrawFee;
     }
 
     /**
