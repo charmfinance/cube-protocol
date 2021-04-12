@@ -343,9 +343,9 @@ contract CubePool is ReentrancyGuard {
         // equity needs to be increased by T * P2 - T * P1.
         _totalEquity = totalEquity;
         if (price != _params.lastPrice) {
-            uint256 _totalSupply = cubeToken.totalSupply();
-            uint256 equityBefore = _params.lastPrice.mul(_totalSupply);
-            uint256 equityAfter = price.mul(_totalSupply);
+            uint256 totalSupply = cubeToken.totalSupply();
+            uint256 equityBefore = _params.lastPrice.mul(totalSupply);
+            uint256 equityAfter = price.mul(totalSupply);
             _totalEquity = _totalEquity.add(equityAfter).sub(equityBefore);
         }
     }
