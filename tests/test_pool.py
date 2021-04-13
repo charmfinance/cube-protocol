@@ -6,9 +6,9 @@ from pytest import approx
 
 LONG, SHORT = False, True
 FEE_INDEX = 6
-MAX_POOL_SHARE_INDEX = 7
-LAST_PRICE_INDEX = 9
-LAST_UPDATED_INDEX = 10
+MAX_POOL_SHARE_INDEX = 8
+LAST_PRICE_INDEX = 10
+LAST_UPDATED_INDEX = 11
 
 
 class Sim(object):
@@ -77,10 +77,10 @@ def test_add_lt(
     pool = deployer.deploy(CubePool, feedsRegistry, cubeTokenImpl)
 
     with reverts("!governance"):
-        pool.addCubeToken("BTC", LONG, 0, 0, {"from": alice})
+        pool.addCubeToken("BTC", LONG, 0, 0, 0, {"from": alice})
 
     with reverts("Spot price should be > 0"):
-        pool.addCubeToken("BTC", LONG, 0, 0)
+        pool.addCubeToken("BTC", LONG, 0, 0, 0)
 
     btcusd = deployer.deploy(MockAggregatorV3Interface)
     btcusd.setPrice(50000 * 1e8)
@@ -90,11 +90,11 @@ def test_add_lt(
 
     btcusd.setPrice(0)
     with reverts("Spot price should be > 0"):
-        pool.addCubeToken("BTC", LONG, 0, 0)
+        pool.addCubeToken("BTC", LONG, 0, 0, 0)
 
     # add bull token
     btcusd.setPrice(50000 * 1e8)
-    tx = pool.addCubeToken("BTC", LONG, 100, 2500)
+    tx = pool.addCubeToken("BTC", LONG, 100, 0, 2500)
 
     cubebtc = CubeToken.at(tx.return_value)
     assert cubebtc.name() == "3X Long BTC"
@@ -110,6 +110,7 @@ def test_add_lt(
         updatePaused,
         added,
         depositWithdrawFee,
+        maxFundingFee,
         maxPoolShare,
         initialSpotPrice,
         lastPrice,
@@ -138,7 +139,7 @@ def test_add_lt(
     assert approx(ev["price"]) == 1e18
 
     # add bear token
-    tx = pool.addCubeToken("BTC", SHORT, 200, 5000)
+    tx = pool.addCubeToken("BTC", SHORT, 200, 0, 5000)
 
     invbtc = CubeToken.at(tx.return_value)
     assert invbtc.name() == "3X Short BTC"
@@ -154,6 +155,7 @@ def test_add_lt(
         updatePaused,
         added,
         depositWithdrawFee,
+        maxFundingFee,
         maxPoolShare,
         initialSpotPrice,
         lastPrice,
@@ -186,7 +188,7 @@ def test_add_lt(
     assert pool.cubeTokens(1) == invbtc
 
     with reverts("Already added"):
-        pool.addCubeToken("BTC", LONG, 0, 0)
+        pool.addCubeToken("BTC", LONG, 0, 0, 0)
 
     assert pool.poolBalance() == 0
     assert pool.totalEquity() == 0
@@ -219,10 +221,10 @@ def test_deposit_and_withdraw(
     BTC = feedsRegistry.stringToBytes32("BTC")
     feedsRegistry.addUsdFeed(BTC, btcusd)
 
-    tx = pool.addCubeToken("BTC", LONG, 100, 0)
+    tx = pool.addCubeToken("BTC", LONG, 100, 0, 0)
     cubebtc = CubeToken.at(tx.return_value)
 
-    tx = pool.addCubeToken("BTC", SHORT, 100, 0)
+    tx = pool.addCubeToken("BTC", SHORT, 100, 0, 0)
     invbtc = CubeToken.at(tx.return_value, 0, 0)
 
     pool.setProtocolFee(protocolFee * 1e4)
@@ -490,10 +492,10 @@ def test_governance_methods(
     BTC = feedsRegistry.stringToBytes32("BTC")
     feedsRegistry.addUsdFeed(BTC, btcusd)
 
-    tx = pool.addCubeToken(BTC, LONG, 0, 0)
+    tx = pool.addCubeToken(BTC, LONG, 0, 0, 0)
     cubebtc = CubeToken.at(tx.return_value)
 
-    tx = pool.addCubeToken(BTC, SHORT, 0, 0)
+    tx = pool.addCubeToken(BTC, SHORT, 0, 0, 0)
     invbtc = CubeToken.at(tx.return_value)
 
     # set fee

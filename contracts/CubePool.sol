@@ -2,6 +2,7 @@
 
 pragma solidity 0.6.12;
 
+import "@openzeppelin/contracts/math/Math.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
 import "@openzeppelin/contracts/proxy/Clones.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -56,6 +57,7 @@ contract CubePool is ReentrancyGuard {
         bool updatePaused;
         bool added; // always true
         uint256 depositWithdrawFee;
+        uint256 maxFundingFee;
         uint256 maxPoolShare;
         uint256 initialSpotPrice;
         uint256 lastPrice;
@@ -237,6 +239,7 @@ contract CubePool is ReentrancyGuard {
         string memory spotSymbol,
         bool inverse,
         uint256 depositWithdrawFee,
+        uint256 maxFundingFee,
         uint256 maxPoolShare
     ) external onlyGovernance returns (address) {
         require(address(cubeTokensMap[spotSymbol][inverse]) == address(0), "Already added");
@@ -258,6 +261,7 @@ contract CubePool is ReentrancyGuard {
             added: true,
             depositWithdrawFee: depositWithdrawFee,
             maxPoolShare: maxPoolShare,
+            maxFundingFee: maxFundingFee,
             initialSpotPrice: spot,
             lastPrice: 0,
             lastUpdated: 0
@@ -337,17 +341,28 @@ contract CubePool is ReentrancyGuard {
             price = spot.mul(spot).mul(spot);
         }
 
+        _totalEquity = totalEquity;
+        uint256 totalSupply = cubeToken.totalSupply();
+        uint256 equityBefore = _params.lastPrice.mul(totalSupply);
+
+        // Apply funding
+        if (_totalEquity > 0) {
+            uint256 timeSinceUpdate = block.timestamp.sub(_params.lastUpdated);
+            uint256 fundingFee = price.mul(_params.maxFundingFee).mul(equityBefore).mul(timeSinceUpdate);
+            {
+                // Avoid stack too deep error
+                fundingFee = fundingFee.div(_totalEquity).div(86400e4);
+            }
+            fundingFee = Math.min(fundingFee, price.div(10));
+            price = price.sub(fundingFee);
+        }
+
         // Update total equity to reflect new price. Total equity is the sum of
         // total supply * price over all cube tokens. Therefore, when the price
         // of a cube token with total supply T changes from P1 to P2, the total
         // equity needs to be increased by T * P2 - T * P1.
-        _totalEquity = totalEquity;
-        if (price != _params.lastPrice) {
-            uint256 totalSupply = cubeToken.totalSupply();
-            uint256 equityBefore = _params.lastPrice.mul(totalSupply);
-            uint256 equityAfter = price.mul(totalSupply);
-            _totalEquity = _totalEquity.add(equityAfter).sub(equityBefore);
-        }
+        uint256 equityAfter = price.mul(totalSupply);
+        _totalEquity = _totalEquity.add(equityAfter).sub(equityBefore);
     }
 
     /// @dev Multiply cube token quantity by price and normalize to get ETH cost
