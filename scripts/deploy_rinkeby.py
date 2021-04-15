@@ -57,14 +57,14 @@ def main():
     pool.setProtocolFee(2000, {"gas_price": gas_strategy})  # 20%
     pool.setMaxPoolBalance(100e18, {"gas_price": gas_strategy})  # 100 eth
 
-    pool.addCubeToken("BTC", LONG, 150, 0, {"gas_price": gas_strategy})
-    pool.addCubeToken("BTC", SHORT, 150, 0, {"gas_price": gas_strategy})
-    pool.addCubeToken("ETH", LONG, 150, 0, {"gas_price": gas_strategy})
-    pool.addCubeToken("ETH", SHORT, 150, 0, {"gas_price": gas_strategy})
-    pool.addCubeToken("LINK", LONG, 300, 0, {"gas_price": gas_strategy})
-    pool.addCubeToken("LINK", SHORT, 300, 0, {"gas_price": gas_strategy})
-    pool.addCubeToken("SNX", LONG, 300, 0, {"gas_price": gas_strategy})
-    pool.addCubeToken("SNX", SHORT, 300, 0, {"gas_price": gas_strategy})
+    pool.addCubeToken("BTC", LONG, 150, 100, 0, {"gas_price": gas_strategy})
+    pool.addCubeToken("BTC", SHORT, 150, 100, 0, {"gas_price": gas_strategy})
+    pool.addCubeToken("ETH", LONG, 150, 100, 0, {"gas_price": gas_strategy})
+    pool.addCubeToken("ETH", SHORT, 150, 100, 0, {"gas_price": gas_strategy})
+    pool.addCubeToken("LINK", LONG, 300, 100, 0, {"gas_price": gas_strategy})
+    pool.addCubeToken("LINK", SHORT, 300, 100, 0, {"gas_price": gas_strategy})
+    pool.addCubeToken("SNX", LONG, 300, 100, 0, {"gas_price": gas_strategy})
+    pool.addCubeToken("SNX", SHORT, 300, 100, 0, {"gas_price": gas_strategy})
 
     print(f"Pool address: {pool.address}")
     print(f"Gas used in deployment: {(balance - deployer.balance()) / 1e18:.4f} ETH")

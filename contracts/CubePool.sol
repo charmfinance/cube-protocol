@@ -345,15 +345,16 @@ contract CubePool is ReentrancyGuard {
         uint256 totalSupply = cubeToken.totalSupply();
         uint256 equityBefore = _params.lastPrice.mul(totalSupply);
 
-        // Apply funding
         if (_totalEquity > 0) {
+            // Funding = pool share * max funding * time elapsed / 24 hours
             uint256 timeSinceUpdate = block.timestamp.sub(_params.lastUpdated);
             uint256 fundingFee = price.mul(_params.maxFundingFee).mul(equityBefore).mul(timeSinceUpdate);
             {
-                // Avoid stack too deep error
+                // Use scoping to avoid stack too deep error
                 fundingFee = fundingFee.div(_totalEquity).div(86400e4);
             }
-            fundingFee = Math.min(fundingFee, price.div(10));
+            // Cap funding and make sure price doesn't become negative
+            fundingFee = Math.min(fundingFee, price.div(5));
             price = price.sub(fundingFee);
         }
 
@@ -419,6 +420,19 @@ contract CubePool is ReentrancyGuard {
         require(params[cubeToken].added, "Not added");
         require(depositWithdrawFee < 1e4, "Fee should be < 100%");
         params[cubeToken].depositWithdrawFee = depositWithdrawFee;
+    }
+
+    /**
+     * @notice Set max funding fee in basis points every 24 hours. The funding
+     * fee is equal to pool share * max funding fee and is charged
+     * continuously. All funding fees go back into the pool, so a lower than
+     * average funding fee actually acts as a rebate and increases the cube
+     * token price.
+     */
+    function setMaxFundingFee(CubeToken cubeToken, uint256 maxFundingFee) external onlyGovernance {
+        require(params[cubeToken].added, "Not added");
+        require(maxFundingFee < 2000, "Max funding fee should be < 20%");
+        params[cubeToken].maxFundingFee = maxFundingFee;
     }
 
     /**
@@ -508,9 +522,9 @@ contract CubePool is ReentrancyGuard {
      * @notice Transfer all ETH to governance in case of emergency. Cannot be called
      * if already finalized
      */
-    function emergencyWithdraw() external onlyGovernanceOrGuardian {
+    function emergencyWithdraw(uint256 amount) external onlyGovernanceOrGuardian {
         require(!finalized, "Finalized");
-        payable(governance).transfer(address(this).balance);
+        payable(governance).transfer(amount);
     }
 
     modifier onlyGovernance {
