@@ -432,6 +432,9 @@ contract CubePool is ReentrancyGuard {
     function setMaxFundingFee(CubeToken cubeToken, uint256 maxFundingFee) external onlyGovernance {
         require(params[cubeToken].added, "Not added");
         require(maxFundingFee < 2000, "Max funding fee should be < 20%");
+
+        // Do update so that previous funding fee is used up to this point
+        update(cubeToken);
         params[cubeToken].maxFundingFee = maxFundingFee;
     }
 
